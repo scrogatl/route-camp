@@ -92,6 +92,21 @@ class OptimizeOut(BaseModel):
     source: OptimizeSource
 
 
+class OrderSummary(BaseModel):
+    poi_ids: list[int]
+    distance_m: float | None  # null when GraphHopper could not route this order
+    time_s: float | None
+
+
+class OptimizePreviewOut(BaseModel):
+    """A proposed stop order and its totals. Nothing is saved; accept by PATCHing poi_ids."""
+
+    source: OptimizeSource
+    current: OrderSummary
+    proposed: OrderSummary
+    geometry: list[list[float]] | None  # the proposed line as [lon, lat] points, when GraphHopper routed it
+
+
 # --- Plans ------------------------------------------------------------------
 
 

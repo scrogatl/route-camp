@@ -7,7 +7,7 @@ from app.database import get_session
 from app.models import Route, RouteStop, Tag, utcnow
 from app.optimize import best_order, haversine_time_matrix
 from app.routing import GraphHopperClient, RoutingError
-from app.schemas import OptimizeOut, RouteIn, RouteOut, RouteUpdate, route_out
+from app.schemas import OptimizeOut, OptimizePreviewOut, OrderSummary, RouteIn, RouteOut, RouteUpdate, route_out
 from app.services import get_or_create_tags, set_route_stops
 
 router = APIRouter(prefix="/routes", tags=["routes"])
@@ -105,6 +105,58 @@ def calculate_route(
     return route_out(route)
 
 
+def _stop_matrix(graphhopper: GraphHopperClient, stops: list[RouteStop], profile: str) -> tuple[list, str]:
+    """Travel times between the stops: GraphHopper's when reachable, straight-line estimates otherwise."""
+    points = [[stop.poi.lon, stop.poi.lat] for stop in stops]
+    try:
+        return graphhopper.matrix(points, profile), "graphhopper"
+    except RoutingError:
+        return haversine_time_matrix([(stop.poi.lat, stop.poi.lon) for stop in stops]), "haversine"
+
+
+def _order_summary(graphhopper: GraphHopperClient, stops: list[RouteStop], profile: str) -> tuple[OrderSummary, list | None]:
+    """Distance and time for the stops in this order, and the line when GraphHopper can route it."""
+    poi_ids = [stop.poi_id for stop in stops]
+    points = [[stop.poi.lon, stop.poi.lat] for stop in stops]
+    try:
+        result = graphhopper.route(points, profile)
+    except RoutingError:
+        return OrderSummary(poi_ids=poi_ids, distance_m=None, time_s=None), None
+    return OrderSummary(poi_ids=poi_ids, distance_m=result.distance_m, time_s=result.time_s), result.geometry
+
+
+@router.post("/{route_id}/optimize-preview", response_model=OptimizePreviewOut)
+def preview_optimize(
+    route_id: int,
+    replace_imported: bool = False,
+    session: Session = Depends(get_session),
+    graphhopper: GraphHopperClient = Depends(get_graphhopper),
+):
+    """Propose the optimize order and its totals without saving anything.
+
+    The stored route is unchanged. The UI shows both orders and accepts by PATCHing poi_ids. Under three
+    stops there is nothing to reorder, so the proposed order is the current one with source "none".
+    """
+    route = get_or_404(session, Route, route_id)
+    _refuse_if_imported(route, replace_imported)
+    stops: list[RouteStop] = list(route.stops)
+    if len(stops) < 3:
+        # Nothing to reorder. A route of two stops still gets its totals; fewer than two has none.
+        if len(stops) < 2:
+            empty = OrderSummary(poi_ids=[stop.poi_id for stop in stops], distance_m=None, time_s=None)
+            return OptimizePreviewOut(source="none", current=empty, proposed=empty, geometry=None)
+        current, geometry = _order_summary(graphhopper, stops, route.profile)
+        return OptimizePreviewOut(source="none", current=current, proposed=current, geometry=geometry)
+
+    matrix, source = _stop_matrix(graphhopper, stops, route.profile)
+    order = best_order(matrix)
+    current, _ = _order_summary(graphhopper, stops, route.profile)
+    if order == list(range(len(stops))):
+        return OptimizePreviewOut(source=source, current=current, proposed=current, geometry=None)
+    proposed, geometry = _order_summary(graphhopper, [stops[i] for i in order], route.profile)
+    return OptimizePreviewOut(source=source, current=current, proposed=proposed, geometry=geometry)
+
+
 @router.post("/{route_id}/optimize", response_model=OptimizeOut)
 def optimize_route(
     route_id: int,
@@ -112,21 +164,14 @@ def optimize_route(
     session: Session = Depends(get_session),
     graphhopper: GraphHopperClient = Depends(get_graphhopper),
 ):
-    """Reorder the stops for the shortest travel time. The first stop stays as the start."""
+    """Reorder the stops for the shortest travel time and save it. The first stop stays as the start."""
     route = get_or_404(session, Route, route_id)
     _refuse_if_imported(route, replace_imported)
     stops: list[RouteStop] = list(route.stops)
     if len(stops) < 3:
         return OptimizeOut(route=route_out(route), source="none")
 
-    points = [[stop.poi.lon, stop.poi.lat] for stop in stops]
-    try:
-        matrix = graphhopper.matrix(points, route.profile)
-        source = "graphhopper"
-    except RoutingError:
-        matrix = haversine_time_matrix([(stop.poi.lat, stop.poi.lon) for stop in stops])
-        source = "haversine"
-
+    matrix, source = _stop_matrix(graphhopper, stops, route.profile)
     route.stops = [stops[i] for i in best_order(matrix)]
     for position, stop in enumerate(route.stops):
         stop.position = position
