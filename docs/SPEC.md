@@ -108,7 +108,9 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]` and `score` (0 or more, or null) accepted on create/update. PATCH with `score: null` clears it |
 | `GET /routes` · `POST /routes` · `GET/PATCH/DELETE /routes/{id}` | Route CRUD; body has `name`, `profile`, `poi_ids` (ordered), `tags` |
 | `POST /routes/{id}/calculate?replace_imported=` | GraphHopper line through the stops in order; caches geometry, distance, time. 422 if fewer than 2 stops, 502 if GraphHopper fails |
-| `POST /routes/{id}/optimize?replace_imported=` | Reorders stops for least travel time, first stop fixed; returns `{route, source}` where source is `graphhopper`, `haversine` or `none` (under 3 stops). Clears the cached line |
+| `POST /routes/{id}/optimize?replace_imported=` | Reorders stops for least travel time, first stop fixed, and saves it; returns `{route, source}` where source is `graphhopper`, `haversine` or `none` (under 3 stops). Clears the cached line |
+| `POST /routes/{id}/optimize-preview?replace_imported=` | The same ordering, saves nothing. Returns `{source, current, proposed, geometry}`: each of `current` and `proposed` is `{poi_ids, distance_m, time_s}` (totals null when GraphHopper cannot route that order), and `geometry` is the proposed line. The UI accepts by PATCHing `poi_ids` and then calling `calculate` |
+| `PATCH /routes/{id}` `{poi_ids}` | Replaces the stops in order (used for moving, removing and accepting a proposed order). Clears the cached line |
 | `GET /plans` · `POST /plans` · `GET/PATCH/DELETE /plans/{id}` | Plan CRUD; `route_ids` (ordered) and `tags` |
 | `GET /tags` · `POST /tags` · `DELETE /tags/{id}` | Tag list; create is idempotent by name |
 | `GET /tags/{id}/items` | All POIs, routes and plans with that tag |
@@ -240,13 +242,27 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   Labels do not collide-check: dense clusters overlap at zoom 9–10.
   A MapLibre symbol layer was tried first and stalled the basemap style in the browser pane, so it was
   dropped.
-- **Routes:** create from ticked POIs with a profile; per route: show (click name), expand (▸) to list
-  its stops in order (click one to fly to it), calc, optimize, GPX download, tags, delete. Tags are set
-  from the route row with the same dialog as plans. Showing a route draws its line, fits the map to
-  it, and numbers its stops on the map in blue (a POI used twice shows "2,5"). **Clear map** hides the
-  line, removes the stop numbers and unticks everything without deleting anything.
-  Stop markers are 24 px, blue, numbered by position.
-- **Plans:** create, rename, edit tags, delete; add routes, reorder (up/down), remove; totals shown.
+- **Route from a folder:** each POI folder header has "route". It asks for a name and a profile (car or
+  fun) and makes a route from the folder's ticked POIs (in tick order) or, if none are ticked, all of its
+  POIs. The optimize review then opens straight away. Fewer than two POIs is refused.
+- **Routes:** create from ticked POIs with a profile; per route: **show** / **hide** (a button; clicking
+  the name also shows it), expand (▸) to list its stops, calc, optimize, GPX download, tags, add to plan
+  (a plan picker), delete. The shown route's row is highlighted and its button reads "hide". Showing a
+  route draws its line, fits the map to it, and numbers its stops on the map in blue (a POI used twice
+  shows "2,5"). **Clear map** hides the line, removes the stop numbers and unticks everything without
+  deleting anything. Stop markers are 24 px, blue, numbered by position.
+- **Stops:** in an expanded route each stop has up, down and remove. Each change is saved at once and
+  clears the line; the route then reads "not calculated" and a hint says to press calc.
+- **Optimize is a review:** optimize asks the preview endpoint and opens a dialog with the current and
+  proposed distance and time, Accept or Reject. The proposed line is drawn dashed blue while the dialog is
+  open. Reject changes nothing. Accept saves the new order and calculates the line. Under three stops it
+  says so and does not open the dialog.
+- **Plans:** a plan is one trip made of routes in order, such as Day 1 and Day 2. The Plans section says
+  so, and an empty plans list explains it with an example. Create, rename, edit tags, delete; add routes
+  from the plan or from a route row, reorder (up/down), remove; totals shown. **show** draws all the
+  plan's calculated routes together, each in its own colour (six colours, reused in turn), fits the map,
+  and lists the routes with a colour swatch in the Routes summary; a route with no line is listed as not
+  calculated.
 - **Dialogs:** never use `alert`, `confirm` or `prompt`. Embedded browsers (including the Claude
   desktop app's browser pane) block them, and `confirm()` then returns false, which made delete buttons
   silently do nothing. `dialogs.ts` provides `showMessage`, `askConfirm` and `askText` on a `<dialog>`.
@@ -282,7 +298,7 @@ Data lives in `./data` (git-ignored): `osm/` (extract), `graph-cache/` (GraphHop
 
 ## 8. Tests
 
-`backend/tests`, 41 tests, none need GraphHopper (it is faked): models and cascades, geometry
+`backend/tests`, 47 tests, none need GraphHopper (it is faked): models and cascades, geometry
 (haversine, simplification), GPX parse/build round trip, optimize, the REST API, plans API (totals,
 reorder, tags), track import and re-import de-duplication, shaping-point spacing, budget and round trip. There are no frontend tests; UI checks were
 done by hand in a browser.
@@ -303,6 +319,11 @@ done by hand in a browser.
   memory.
 - No offline tiles (PMTiles would allow it), no POI editing UI beyond create/delete, no bulk actions.
 - Optimize keeps the first stop fixed and has no return leg, time windows or scoring.
+- Accept saves the new order before it calculates the line. If GraphHopper fails at that second step the
+  order is kept and the route has no line; calc again to retry.
+- Stop ordering is up/down buttons only. Ordering the POIs of a tag folder as a whole (drag, or a
+  "sequence" the folder keeps) is planned for later.
+- The plan view has no map of each plan's stops, and it draws only routes that have a line.
 
 ## 10. Rebuilding from scratch
 
