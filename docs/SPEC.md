@@ -244,7 +244,8 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   dropped.
 - **Route from a folder:** each POI folder header has "route". It asks for a name and a profile (car or
   fun) and makes a route from the folder's ticked POIs (in tick order) or, if none are ticked, all of its
-  POIs. The optimize review then opens straight away. Fewer than two POIs is refused.
+  POIs. The stops keep that order, and the line is calculated in it straight away. Nothing reorders the
+  stops. Fewer than two POIs is refused.
 - **Routes:** create from ticked POIs with a profile; per route: **show** / **hide** (a button; clicking
   the name also shows it), expand (▸) to list its stops, calc, optimize, GPX download, tags, add to plan
   (a plan picker), delete. The shown route's row is highlighted and its button reads "hide". Showing a
@@ -252,7 +253,9 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   shows "2,5"). **Clear map** hides the line, removes the stop numbers and unticks everything without
   deleting anything. Stop markers are 24 px, blue, numbered by position.
 - **Stops:** in an expanded route each stop has up, down and remove. Each change is saved at once and
-  clears the line; the route then reads "not calculated" and a hint says to press calc.
+  clears the line. The route then reads "order changed, recalc" and shows a **recalc** button, which
+  calculates the line through the stops in the order the user set. Nothing reorders or recalculates on
+  its own; optimize only runs when clicked, through the accept / reject review.
 - **Optimize is a review:** optimize asks the preview endpoint and opens a dialog with the current and
   proposed distance and time, Accept or Reject. The proposed line is drawn dashed blue while the dialog is
   open. Reject changes nothing. Accept saves the new order and calculates the line. Under three stops it

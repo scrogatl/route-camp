@@ -25,6 +25,9 @@ const state = {
 };
 
 const expandedRoutes = new Set<number>(); // routes whose stops are listed in the sidebar
+// Routes whose stops were reordered since their line was last calculated. Kept in memory only; after a
+// reload a route without a line simply reads "not calculated".
+const staleRoutes = new Set<number>();
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -547,7 +550,7 @@ function ticked(ids: number[]): boolean {
 }
 
 // A route from a folder: its ticked POIs in tick order if any are ticked, otherwise every POI in it.
-// Then the optimize review opens straight away, so the order can be checked.
+// The line is calculated in that order; nothing reorders the stops.
 async function routeFromFolder(tag: string, pois: POI[]): Promise<void> {
   const inFolder = new Set(pois.map((poi) => poi.id));
   const tickedIds = state.selected.filter((id) => inFolder.has(id));
@@ -563,10 +566,12 @@ async function routeFromFolder(tag: string, pois: POI[]): Promise<void> {
     notify('The profile must be "car" or "fun".');
     return;
   }
+  // The stops are kept in the order chosen (tick order, or the folder's displayed order). No reordering.
   const route = await api.createRoute({ name, profile, poi_ids: poiIds });
   state.selected = [];
+  const calculated = await api.calculateRoute(route.id, false);
   await refresh();
-  await optimize(route);
+  showRoute(calculated);
 }
 
 // Puts a tag back on exactly these POIs (those still in the library), recreating the tag if it was deleted.
@@ -588,6 +593,7 @@ function renderPois(): void {
 async function calculate(route: Route): Promise<void> {
   if (!(await confirmReplaceImported(route, "Calculating"))) return;
   const updated = await api.calculateRoute(route.id, route.geometry_source === "imported");
+  staleRoutes.delete(route.id);
   await refresh();
   showRoute(updated);
 }
@@ -630,9 +636,11 @@ async function reviewOrder(route: Route, preview: OptimizePreview): Promise<void
   showRoute(updated);
 }
 
-// Replaces a route's stops (after a move or a removal). Changing stops clears the cached line.
+// Replaces a route's stops (after a move or a removal). Changing stops clears the cached line, so the
+// route is marked stale until the user presses recalc. Nothing else reorders or recalculates.
 async function setStops(route: Route, poiIds: number[]): Promise<void> {
   const updated = await api.updateRoute(route.id, { poi_ids: poiIds });
+  staleRoutes.add(route.id);
   await refresh();
   if (state.shownRouteId === route.id) showRoute(updated);
 }
@@ -694,6 +702,7 @@ function planPicker(route: Route): HTMLElement {
 
 function renderRouteItem(route: Route): HTMLElement {
   const expanded = expandedRoutes.has(route.id);
+  const stale = staleRoutes.has(route.id);
   const shown = state.shownRouteId === route.id;
   const toggleStops = () => {
     if (expanded) expandedRoutes.delete(route.id);
@@ -733,12 +742,17 @@ function renderRouteItem(route: Route): HTMLElement {
       h(
         "span",
         { className: "meta" },
-        route.distance_m == null ? `${route.poi_ids.length} stops, not calculated` : formatKm(route.distance_m),
+        stale
+          ? "order changed, recalc"
+          : route.distance_m == null
+            ? `${route.poi_ids.length} stops, not calculated`
+            : formatKm(route.distance_m),
       ),
       h("button", {
-        title: "Calculate with GraphHopper",
+        className: stale ? "recalc-route" : "",
+        title: "Calculate the line through the stops in this order",
         onclick: () => run(() => calculate(route)),
-      }, "calc"),
+      }, stale ? "recalc" : "calc"),
       h("button", {
         title: "Review a shorter stop order before saving it",
         onclick: () => run(() => optimize(route)),
@@ -769,7 +783,7 @@ function renderRouteItem(route: Route): HTMLElement {
     ...(expanded
       ? [
           renderStops(route),
-          h("p", { className: "hint stops-hint" }, "Changing stops clears the line. Press calc to draw it again."),
+          h("p", { className: "hint stops-hint" }, "The stops stay in this order. After a change, press recalc to draw the line through them."),
         ]
       : []),
   );
