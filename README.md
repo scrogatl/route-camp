@@ -26,9 +26,24 @@ Services (host ports can be changed with `BACKEND_PORT` and `FRONTEND_PORT` in `
 
 | Service       | URL                        | Purpose                                      |
 |---------------|----------------------------|----------------------------------------------|
-| frontend      | http://localhost:5173      | Map UI (Vite dev server)                     |
+| frontend      | http://localhost:5173      | Map UI: static build served by nginx         |
 | backend       | http://localhost:8080/docs | FastAPI app and interactive API docs         |
 | graphhopper   | http://localhost:8989      | Routing HTTP API (`/route`)                  |
+
+The production frontend is an nginx image built from `frontend/Dockerfile`. nginx serves the static bundle and
+proxies `/api` to the backend, so the browser talks to one origin. Compose starts the backend before the
+frontend, so nginx can resolve the `backend` name.
+
+### Development with hot reload
+
+For frontend work, run the Vite dev server instead, using the override file:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+Vite serves on the same port (5173), proxies `/api` to the backend, and reloads on save. Bring it down and run
+`docker compose up --build` to go back to the production build.
 
 ## Changing the region
 
@@ -55,8 +70,21 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
   (`car` = fastest, `fun` = curvy secondary roads, avoids motorways), and press "Create from selected POIs".
   Then press **calc** to route it. Click the route name to draw it and see distance and time.
 - **optimize**: reorders a route's stops for the shortest travel time (first stop stays as start). Calculate again afterwards.
-- **GPX**: "Import GPX" turns waypoints into POIs and `rte` entries into routes. Each route's **GPX** link exports
-  waypoints, route points and the calculated line as a track.
+- **Plans**: a plan is an ordered list of routes. Create one in the Plans section, then add routes with the
+  dropdown and reorder them with ↑ and ↓. The totals sum the routes that have a distance, and the time total
+  only counts routes that have a time. Rename, tag or delete plans with their buttons. Deleting a plan keeps its routes.
+  The tag filter also filters plans.
+- **GPX import**: "Import GPX" reads waypoints, `rte` entries and `trk` tracks.
+  - Waypoints become POIs. A POI with the same name and position is reused.
+  - An `rte` becomes a route over its POIs.
+  - A `trk` becomes a route between its start and end POIs. Its line is stored as the route's geometry, simplified
+    to at most 2000 points. If a `trk` starts and ends at an `rte` of the same name, its line is attached to that
+    route instead of making a second one.
+  - Re-importing the same file creates nothing new. Routes match on name and ordered POIs, and tracks on name,
+    start/end POIs and length (within 2%, or 500 m). The import message lists what was created and what was already there.
+  - An imported track is marked as such. **calc** and **optimize** ask before replacing it, because calculating
+    gives a GraphHopper line instead. Changing a route's stops or profile also clears the cached line.
+  - Each route's **GPX** link exports waypoints, route points and the cached line as a track.
 
 ## Architecture
 
@@ -123,9 +151,19 @@ npm run dev                 # http://localhost:5173
 
 ## Known gaps
 
-- Tracks (`trk`) in imported GPX files are skipped. Only waypoints and routes are imported.
-- Plans have an API but no UI yet.
-- Stop optimization uses a nearest-neighbour plus 2-opt heuristic. OR-Tools or VROOM would be better for larger problems.
-- The frontend runs the Vite dev server in Docker. A static build behind nginx is still to do.
-- No authentication. Anyone who can reach the backend can change the data.
-- SQLite with synchronous SQLAlchemy calls inside FastAPI handlers. Fine for one user, not for heavy concurrent use.
+- **Track segments are joined.** A `trk` with several segments becomes one line, and the gap between segments is not kept.
+- **De-duplication is a heuristic.** Two different routes with the same name and the same POIs count as one.
+  Tracks match on length within 2%. Re-importing edited files can therefore leave stale routes behind.
+- **Plans have no map view.** A plan is a list and its totals; its routes are not drawn together.
+- **Plan time totals can be partial.** An imported track has no time, so a plan with one shows "(partial)".
+- **Stop optimization** uses nearest-neighbour plus 2-opt. OR-Tools or VROOM would do better on large problems.
+- **Optimize and calculate** over an imported track need an explicit confirmation, which is done in the UI. The API
+  needs `replace_imported=true`.
+- **Routing uses pairwise `/route` calls** for the optimize matrix, because this GraphHopper build has no `/matrix`
+  endpoint. That is O(n²) requests, so it is slow for very long routes.
+- **The migration is minimal.** Startup adds missing nullable columns only. Anything else needs a migration tool.
+- **GPX upload is not streamed.** A very large file is read into memory, and the handler is async but calls the
+  synchronous database session.
+- **No authentication.** Anyone who can reach the backend can change the data.
+- **SQLite with synchronous SQLAlchemy calls** inside FastAPI handlers. Fine for one user, not for heavy concurrent use.
+- **Graph cache files are root-owned** because the GraphHopper container runs as root. Deleting a region's cache needs `sudo`.
