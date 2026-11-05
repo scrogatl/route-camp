@@ -1,6 +1,7 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
+import { askConfirm, askText, showMessage } from "./dialogs";
 import { api, type ImportSummary, type Plan, type POI, type Profile, type Route, type Tag } from "./api";
 
 // Minimal app state. The server is the source of truth; refresh() reloads everything after each change.
@@ -35,7 +36,7 @@ function h<K extends keyof HTMLElementTagNameMap>(
 }
 
 function notify(message: string): void {
-  window.alert(message);
+  void showMessage(message);
 }
 
 async function run(action: () => Promise<void>): Promise<void> {
@@ -88,9 +89,9 @@ function importMessage(summary: ImportSummary): string {
 }
 
 // Calculating or optimizing over an imported GPX track replaces it, so ask first.
-function confirmReplaceImported(route: Route, action: string): boolean {
+async function confirmReplaceImported(route: Route, action: string): Promise<boolean> {
   if (route.geometry_source !== "imported") return true;
-  return window.confirm(`"${route.name}" has an imported GPX track. ${action} replaces that track. Continue?`);
+  return askConfirm(`"${route.name}" has an imported GPX track. ${action} replaces that track. Continue?`);
 }
 
 const emptyLine = { type: "FeatureCollection", features: [] } as { type: "FeatureCollection"; features: never[] };
@@ -140,7 +141,7 @@ function renderMarkers(): void {
 
 map.on("click", (event) =>
   run(async () => {
-    const name = window.prompt("Name for the new POI?")?.trim();
+    const name = (await askText("Name for the new POI?"))?.trim();
     if (!name) return;
     await api.createPoi({ name, lat: event.lngLat.lat, lon: event.lngLat.lng });
     await refresh();
@@ -169,6 +170,13 @@ function showRoute(route: Route): void {
   const [first, ...rest] = route.geometry;
   const bounds = rest.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(first, first));
   map.fitBounds(bounds, { padding: 60 });
+}
+
+function clearShownRoute(): void {
+  state.shownRouteId = null;
+  pendingRoute = null;
+  $("route-summary").textContent = "";
+  map.getSource<maplibregl.GeoJSONSource>("route")?.setData(emptyLine);
 }
 
 // --- Sidebar: POIs ----------------------------------------------------------
@@ -206,12 +214,12 @@ function renderPois(): void {
           title: "Delete POI",
           onclick: () =>
             run(async () => {
-              if (!window.confirm(`Delete POI "${poi.name}"? Routes that use it will lose that stop.`)) return;
+              if (!(await askConfirm(`Delete POI "${poi.name}"? Routes that use it will lose that stop.`, "Delete"))) return;
               await api.deletePoi(poi.id);
               state.selected = state.selected.filter((id) => id !== poi.id);
               await refresh();
             }),
-        }, "×"),
+        }, "delete"),
       ),
     ),
   );
@@ -230,14 +238,14 @@ function renderTagFilter(tags: Tag[]): void {
 // --- Sidebar: routes --------------------------------------------------------
 
 async function calculate(route: Route): Promise<void> {
-  if (!confirmReplaceImported(route, "Calculating")) return;
+  if (!(await confirmReplaceImported(route, "Calculating"))) return;
   const updated = await api.calculateRoute(route.id, route.geometry_source === "imported");
   await refresh();
   showRoute(updated);
 }
 
 async function optimize(route: Route): Promise<void> {
-  if (!confirmReplaceImported(route, "Optimizing")) return;
+  if (!(await confirmReplaceImported(route, "Optimizing"))) return;
   const { source } = await api.optimizeRoute(route.id, route.geometry_source === "imported");
   await refresh();
   notify(
@@ -276,16 +284,12 @@ function renderRoutes(): void {
           title: "Delete route",
           onclick: () =>
             run(async () => {
-              if (!window.confirm(`Delete route "${route.name}"?`)) return;
+              if (!(await askConfirm(`Delete route "${route.name}"?`, "Delete"))) return;
               await api.deleteRoute(route.id);
-              if (state.shownRouteId === route.id) {
-                state.shownRouteId = null;
-                $("route-summary").textContent = "";
-                map.getSource<maplibregl.GeoJSONSource>("route")?.setData(emptyLine);
-              }
+              if (state.shownRouteId === route.id) clearShownRoute();
               await refresh();
             }),
-        }, "×"),
+        }, "delete"),
       ),
     ),
   );
@@ -333,7 +337,7 @@ function renderPlans(): void {
             title: "Rename plan",
             onclick: () =>
               run(async () => {
-                const name = window.prompt("Plan name?", plan.name)?.trim();
+                const name = (await askText("Plan name?", plan.name))?.trim();
                 if (!name) return;
                 await api.updatePlan(plan.id, { name });
                 await refresh();
@@ -343,7 +347,7 @@ function renderPlans(): void {
             title: "Edit tags",
             onclick: () =>
               run(async () => {
-                const input = window.prompt("Tags, comma separated?", plan.tags.join(", "));
+                const input = await askText("Tags, comma separated?", plan.tags.join(", "));
                 if (input === null) return;
                 const tags = input.split(",").map((t) => t.trim()).filter(Boolean);
                 await api.updatePlan(plan.id, { tags });
@@ -354,11 +358,11 @@ function renderPlans(): void {
             title: "Delete plan",
             onclick: () =>
               run(async () => {
-                if (!window.confirm(`Delete plan "${plan.name}"? Its routes are kept.`)) return;
+                if (!(await askConfirm(`Delete plan "${plan.name}"? Its routes are kept.`, "Delete"))) return;
                 await api.deletePlan(plan.id);
                 await refresh();
               }),
-          }, "×"),
+          }, "delete"),
         ),
         h(
           "div",
@@ -387,7 +391,7 @@ function renderPlans(): void {
               h("button", {
                 title: "Remove from plan",
                 onclick: () => setPlanRoutes(plan, plan.route_ids.filter((_, i) => i !== index)),
-              }, "×"),
+              }, "remove"),
             );
           }),
         ),
@@ -448,6 +452,14 @@ $("route-create").onclick = () =>
     state.selected = [];
     await refresh();
   });
+
+// Hides the drawn route and unticks POIs; nothing is deleted.
+$("map-clear").onclick = () => {
+  clearShownRoute();
+  state.selected = [];
+  renderPois();
+  renderMarkers();
+};
 
 $("plan-create").onclick = () =>
   run(async () => {

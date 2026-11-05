@@ -82,3 +82,14 @@ li.plan { border-top: 1px dashed var(--border); padding: 6px 0; }
 .plan-head .name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ol.plan-routes { margin: 4px 0 4px 16px; }
 button:disabled { opacity: 0.4; cursor: default; }
+
+#app-dialog {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  white-space: pre-line;
+}
+#app-dialog::backdrop { background: rgb(0 0 0 / 0.4); }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
