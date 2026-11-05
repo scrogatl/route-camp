@@ -166,6 +166,7 @@ map.on("style.load", () => {
     minzoom: 7,
     layout: {
       "text-field": ["get", "label"],
+      "text-font": ["Noto Sans Regular"], // the basemap's glyph server has Noto Sans, not MapLibre's default
       "text-size": 12,
       "text-anchor": "top",
       "text-offset": [0, 1.3],
