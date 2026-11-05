@@ -61,6 +61,23 @@ li.item .name { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellip
 li.item .meta { color: var(--muted); font-size: 12px; }
 li.item button { padding: 1px 6px; }
 
+/* A POI marker and its optional name/score label; the label shows from LABEL_MIN_ZOOM (main.ts). */
+.poi-pin { position: relative; display: inline-block; }
+.poi-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 2px;
+  display: none;
+  white-space: nowrap;
+  pointer-events: none;
+  color: #1d1d1f;
+  font: 12px/1.2 system-ui, sans-serif;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
+}
+#map.show-labels .poi-label { display: block; }
+
 .marker {
   width: 18px;
   height: 18px;

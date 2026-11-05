@@ -158,37 +158,17 @@ map.on("style.load", () => {
     layout: { "line-join": "round", "line-cap": "round" },
     paint: { "line-color": "#d9480f", "line-width": 4 },
   });
-  map.addSource("pois", { type: "geojson", data: emptyLine });
-  map.addLayer({
-    id: "poi-labels",
-    type: "symbol",
-    source: "pois",
-    minzoom: 7,
-    layout: {
-      "text-field": ["get", "label"],
-      "text-font": ["Noto Sans Regular"], // the basemap's glyph server has Noto Sans, not MapLibre's default
-      "text-size": 12,
-      "text-anchor": "top",
-      "text-offset": [0, 1.3],
-      "text-max-width": 14,
-    },
-    paint: {
-      "text-color": "#1d1d1f",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 2,
-    },
-  });
-  renderLabels();
   if (pendingRoute) showRoute(pendingRoute);
 });
 
 let markers: maplibregl.Marker[] = [];
 
-// Map labels are a symbol layer, not DOM labels: MapLibre's collision detection hides the ones that
-// would overlap, so the 138-odd labels stay readable at state zoom. The layer only shows from zoom 7.
+// POI labels are DOM elements shown only from LABEL_MIN_ZOOM, so the state-wide view stays uncluttered.
+// (A MapLibre symbol layer was tried first; in the browser pane it stalled the basemap style.)
 type LabelMode = "both" | "name" | "score" | "none";
 const LABEL_KEY = "route-camp.labels";
 const LABEL_MODES: LabelMode[] = ["both", "name", "score", "none"];
+const LABEL_MIN_ZOOM = 9;
 
 function loadLabelMode(): LabelMode {
   try {
@@ -209,18 +189,11 @@ function labelFor(poi: POI): string {
   return showScore ? String(poi.score) : "";
 }
 
-function renderLabels(): void {
-  const source = map.getSource<maplibregl.GeoJSONSource>("pois");
-  if (!source) return; // the style is still loading; style.load draws them
-  const features = state.pois
-    .map((poi) => ({
-      type: "Feature" as const,
-      properties: { label: labelFor(poi) },
-      geometry: { type: "Point" as const, coordinates: [poi.lon, poi.lat] },
-    }))
-    .filter((feature) => feature.properties.label !== "");
-  source.setData({ type: "FeatureCollection", features });
+function updateLabelVisibility(): void {
+  $("map").classList.toggle("show-labels", map.getZoom() >= LABEL_MIN_ZOOM);
 }
+map.on("zoom", updateLabelVisibility);
+updateLabelVisibility();
 
 // Stops of the route on the map, numbered by position ("2" or "2,5" when the POI appears twice).
 function stopLabels(): Map<number, string> {
@@ -238,21 +211,26 @@ function renderMarkers(): void {
     const classes = ["marker"];
     if (state.selected.includes(poi.id)) classes.push("selected");
     if (stop) classes.push("stop");
+    const label = labelFor(poi);
     const element = h(
       "div",
-      {
-        className: classes.join(" "),
-        title: stop ? `Stop ${stop}: ${poi.name}` : poi.name,
-        onclick: (event: Event) => {
-          event.stopPropagation();
-          toggleSelected(poi.id);
+      { className: "poi-pin" },
+      h(
+        "div",
+        {
+          className: classes.join(" "),
+          title: stop ? `Stop ${stop}: ${poi.name}` : poi.name,
+          onclick: (event: Event) => {
+            event.stopPropagation();
+            toggleSelected(poi.id);
+          },
         },
-      },
-      stop ?? "",
+        stop ?? "",
+      ),
+      ...(label ? [h("span", { className: "poi-label" }, label)] : []),
     );
     return new maplibregl.Marker({ element }).setLngLat([poi.lon, poi.lat]).addTo(map);
   });
-  renderLabels();
 }
 
 map.on("click", (event) =>
@@ -718,7 +696,7 @@ labelSelect.onchange = () => {
   } catch {
     // Not stored; the choice still applies to this page view.
   }
-  renderLabels();
+  renderMarkers();
 };
 
 // Each section header toggles its body; the state is remembered like the folders.
