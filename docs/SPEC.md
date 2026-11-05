@@ -61,7 +61,7 @@ osm-fetch (one-shot alpine container): downloads the OSM extract into ./data/osm
 Tables (see `backend/app/models.py`):
 
 - **tags**: `id`, `name` (unique). Names are normalised to trimmed lowercase.
-- **pois**: `id`, `name`, `lat`, `lon`, `notes?`, `created_at`, `updated_at`.
+- **pois**: `id`, `name`, `lat`, `lon`, `notes?`, `score?` (integer), `created_at`, `updated_at`.
 - **routes**: `id`, `name`, `notes?`, `profile` (`car` | `fun`), cached line fields:
   `distance_m?`, `time_s?`, `geometry?` (JSON `[[lon, lat], ...]`), `geometry_source?`
   (`calculated` | `imported`), `calculated_at?`, timestamps.
@@ -85,6 +85,10 @@ All foreign keys use `ON DELETE CASCADE`. SQLite needs `PRAGMA foreign_keys=ON` 
 - **Imported tracks are protected:** a route whose `geometry_source` is `imported` (from a GPX `trk`)
   is never recalculated or reordered by accident. `calculate` and `optimize` return 409 unless called
   with `replace_imported=true`; the UI asks the user first.
+- **Scores:** a POI's `score` is the number at the end of its name after a space ("TALU 669" -> 669;
+  `backend/app/scores.py`). Set on GPX import for new POIs only, and by the one-off backfill
+  `python -m app.backfill_scores`, which fills only empty scores and is never run at startup (so a
+  cleared score stays cleared). Edits through the API are explicit; nothing re-parses names.
 - **Plan totals** add up `distance_m` and `time_s` over the plan's routes that have them, and report
   how many routes have a distance or time, so the UI can say "partial".
 
@@ -101,7 +105,7 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | Method and path | Purpose |
 |---|---|
 | `GET /config` | `{map_style_url, routing_profiles: ["car","fun"]}` for the frontend |
-| `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]` accepted on create/update |
+| `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]` and `score` (0 or more, or null) accepted on create/update. PATCH with `score: null` clears it |
 | `GET /routes` · `POST /routes` · `GET/PATCH/DELETE /routes/{id}` | Route CRUD; body has `name`, `profile`, `poi_ids` (ordered), `tags` |
 | `POST /routes/{id}/calculate?replace_imported=` | GraphHopper line through the stops in order; caches geometry, distance, time. 422 if fewer than 2 stops, 502 if GraphHopper fails |
 | `POST /routes/{id}/optimize?replace_imported=` | Reorders stops for least travel time, first stop fixed; returns `{route, source}` where source is `graphhopper`, `haversine` or `none` (under 3 stops). Clears the cached line |
@@ -128,7 +132,8 @@ start). OR-Tools or VROOM is the planned upgrade when time windows, a return leg
 
 ### GPX import rules (`backend/app/services.py`)
 
-1. **Waypoints (`wpt`) become POIs.** An existing POI is reused when the name matches and lat/lon are
+1. **Waypoints (`wpt`) become POIs.** A new POI takes its score from a trailing number in its name (see
+   the **Scores** rule in section 3). An existing POI is reused when the name matches and lat/lon are
    within 1e-6°. Within one file, points at the same rounded coordinate share a POI.
 2. **Routes (`rte`) become routes** over the POIs of their route points (each `rtept` is resolved to a
    POI the same way). Re-import matches an existing route with the same name and the same ordered POI ids.
@@ -214,16 +219,33 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   dialog, to every POI in that folder) and, except on Untagged, "untag all" (removes that folder's tag
   from all its POIs after a confirm; they move to their other folders or to Untagged). Both work while
   the folder is collapsed. Requests go one POI at a time so a big folder doesn't flood SQLite.
+- **Select / unselect:** each POI folder header has a "select" button that ticks every POI in the folder
+  (appended after the current tick order, in the folder's displayed order). Once all of them are
+  ticked it reads "unselect" and unticks them. Works while the folder is collapsed.
+- **Undo after untag all:** a successful "untag all" shows a bar at the bottom of the page (not a
+  modal): `Removed "<tag>" from N POIs.` with **Undo**. Undo re-tags exactly those POI ids, recreating
+  the tag by name if it was deleted. The bar goes away after 10 s, on its × button, or when the next
+  action runs (`run()` in `main.ts` calls `hideUndo()`). `showUndo()`/`hideUndo()` are in `dialogs.ts`.
+- **Scores:** each POI row shows its score and has a "score" button (askText; blank clears it; must be
+  a whole number, 0 or more).
 - **Sections collapse:** the POIs, Routes and Plans headers toggle their body. Collapsed sections and
   folders are remembered in `localStorage` under `route-camp.collapsed` (a list of keys such as
   `section/pois` or `poi/<tag>`), wrapped in try/catch because storage can be unavailable.
-- **POIs:** markers on the map; click the map to add a POI (asks for a name); tick POIs in a folder
-  (tick order is route order); click a name to fly to it; tag the ticked POIs; delete.
+- **POIs:** markers on the map (18 px, white ring; ticked POIs are filled with the accent colour); click
+  the map to add a POI (asks for a name); tick POIs in a folder (tick order is route order); click a name
+  to fly to it; tag the ticked POIs; delete.
+- **Map labels:** a "Map labels" control at the top right of the map chooses name, score, both (the
+  default) or none, stored in `localStorage` under `route-camp.labels`. Labels are DOM elements inside
+  each marker, shown from zoom 9 (`LABEL_MIN_ZOOM`); a white text halo keeps them legible on the basemap.
+  Labels do not collide-check: dense clusters overlap at zoom 9–10.
+  A MapLibre symbol layer was tried first and stalled the basemap style in the browser pane, so it was
+  dropped.
 - **Routes:** create from ticked POIs with a profile; per route: show (click name), expand (▸) to list
   its stops in order (click one to fly to it), calc, optimize, GPX download, tags, delete. Tags are set
   from the route row with the same dialog as plans. Showing a route draws its line, fits the map to
   it, and numbers its stops on the map in blue (a POI used twice shows "2,5"). **Clear map** hides the
   line, removes the stop numbers and unticks everything without deleting anything.
+  Stop markers are 24 px, blue, numbered by position.
 - **Plans:** create, rename, edit tags, delete; add routes, reorder (up/down), remove; totals shown.
 - **Dialogs:** never use `alert`, `confirm` or `prompt`. Embedded browsers (including the Claude
   desktop app's browser pane) block them, and `confirm()` then returns false, which made delete buttons
@@ -260,13 +282,18 @@ Data lives in `./data` (git-ignored): `osm/` (extract), `graph-cache/` (GraphHop
 
 ## 8. Tests
 
-`backend/tests`, 36 tests, none need GraphHopper (it is faked): models and cascades, geometry
+`backend/tests`, 41 tests, none need GraphHopper (it is faked): models and cascades, geometry
 (haversine, simplification), GPX parse/build round trip, optimize, the REST API, plans API (totals,
 reorder, tags), track import and re-import de-duplication, shaping-point spacing, budget and round trip. There are no frontend tests; UI checks were
 done by hand in a browser.
 
 ## 9. Known gaps and next steps
 
+- Scores: the name rule is "a space and 1 to 9 digits at the end" (so "Route 66" would score 66). The
+  backfill is a manual command (`python -m app.backfill_scores`), not automatic. UI-created POIs get no
+  score unless one is typed in. Only the score column changes; GPX export is unchanged.
+- Labels: no collision handling, so dense clusters overlap at zoom 9–10. A symbol layer with collision
+  would fix that, but it stalled the basemap style in the browser pane; the cause is unknown.
 - Garmin shaping points: ride a route exported with them to confirm the zūmo keeps to the planned
   roads, and confirm the device's limit on route points (`max_route_points`).
 - The "fun" profile only re-weights road classes. A curvature-based model would be closer to Kurviger.
