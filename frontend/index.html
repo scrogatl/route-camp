@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>route-camp</title>
+  </head>
+  <body>
+    <aside id="sidebar">
+      <h1>route-camp</h1>
+
+      <section>
+        <h2>GPX</h2>
+        <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" />
+        <button id="gpx-import">Import GPX</button>
+      </section>
+
+      <section>
+        <h2>POIs</h2>
+        <label>Filter by tag
+          <select id="tag-filter"></select>
+        </label>
+        <p class="hint">Click the map to add a POI. Tick POIs to build a route or tag them.</p>
+        <ul id="poi-list"></ul>
+        <div class="row">
+          <input id="tag-input" placeholder="tag name" />
+          <button id="tag-selected">Tag selected</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>New route</h2>
+        <input id="route-name" placeholder="route name" />
+        <label>Profile
+          <select id="route-profile">
+            <option value="car">car</option>
+            <option value="fun">fun</option>
+          </select>
+        </label>
+        <button id="route-create">Create from selected POIs (in tick order)</button>
+      </section>
+
+      <section>
+        <h2>Routes</h2>
+        <ul id="route-list"></ul>
+        <p id="route-summary" class="hint"></p>
+      </section>
+    </aside>
+    <div id="map"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
