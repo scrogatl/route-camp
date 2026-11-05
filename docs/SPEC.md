@@ -259,6 +259,11 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   imported GPX track shows "no time" until calculated. Each route has a tick box; ticked routes can be
   tagged or untagged together with the tag field and **Tag selected** / **Untag** under the list.
   Clear map also unticks routes.
+- **Route tags** show as chips under the route: × removes one; **+ tag** adds one (or several, comma
+  separated) and keeps the others.
+- **Adding stops to an existing route:** in the expanded stop list, "add a stop…" appends any POI, and
+  **add ticked (N)** appends the ticked POIs in tick order, skipping ones already on the route. Then
+  move them with ↑ / ↓ and recalc.
 - **Routes:** create from ticked POIs with a profile; per route: **show** / **hide** (a button; clicking
   the name also shows it), expand (▸) to list its stops, calc, optimize, GPX download, tags, add to plan
   (a plan picker), delete. The shown route's row is highlighted and its button reads "hide". Showing a

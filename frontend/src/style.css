@@ -238,3 +238,23 @@ li.empty-plans { border: 0; padding: 4px 0; }
 
 /* A route whose stops changed: its recalc button stands out. */
 button.recalc-route { font-weight: 600; border: 1px solid var(--accent); border-radius: 4px; }
+
+/* Tag chips under a route: × removes a tag, "+ tag" adds one. */
+.tag-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0 4px 22px; }
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.tag-chip button { border: 0; background: none; color: inherit; padding: 0 4px; margin: 0; font-size: 12px; line-height: 1; }
+.tag-chip button:hover { color: var(--accent); }
+button.add-tag { font-size: 11px; padding: 0 6px; margin: 0; }
+
+/* Adding stops to an existing route, under its stop list. */
+.add-stops { display: flex; gap: 4px; margin: 2px 0 4px 22px; }
+.add-stops select { flex: 1; min-width: 0; width: auto; }

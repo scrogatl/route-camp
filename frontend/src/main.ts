@@ -447,6 +447,7 @@ function toggleSelected(poiId: number): void {
     ? state.selected.filter((id) => id !== poiId)
     : [...state.selected, poiId];
   renderPois();
+  renderRoutes(); // "add ticked (N)" on expanded routes follows the ticks
   renderMarkers();
 }
 
@@ -515,6 +516,7 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
         ? state.selected.filter((id) => !ids.includes(id))
         : [...state.selected, ...ids.filter((id) => !state.selected.includes(id))];
       renderPois();
+      renderRoutes();
       renderMarkers();
     },
   }, allTicked ? "unselect" : "select");
@@ -743,6 +745,39 @@ function renderStops(route: Route): HTMLElement {
   );
 }
 
+// Adds POIs to the end of an existing route: one picked from the list, or every ticked POI (in tick order,
+// skipping ones already on the route). Move them with ↑ / ↓, then recalc.
+function renderAddStops(route: Route): HTMLElement {
+  const picker: HTMLSelectElement = h(
+    "select",
+    {
+      className: "stop-picker",
+      title: "Add a POI to the end of this route",
+      onchange: () => {
+        const poiId = Number(picker.value);
+        picker.value = "";
+        if (poiId) void run(() => setStops(route, [...route.poi_ids, poiId]));
+      },
+    },
+    h("option", { value: "" }, "add a stop…"),
+    ...state.pois
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((poi) => h("option", { value: String(poi.id) }, poi.name)),
+  );
+  const ticked = state.selected.filter((id) => !route.poi_ids.includes(id));
+  return h(
+    "div",
+    { className: "add-stops" },
+    picker,
+    h("button", {
+      title: "Add the POIs ticked in the POI list to the end of this route, in tick order",
+      disabled: ticked.length === 0,
+      onclick: () => run(() => setStops(route, [...route.poi_ids, ...ticked])),
+    }, `add ticked (${ticked.length})`),
+  );
+}
+
 // A route can be added to a plan from its own row, as well as from the plan.
 function planPicker(route: Route): HTMLElement {
   const available = state.plans.filter((plan) => !plan.route_ids.includes(route.id));
@@ -829,16 +864,6 @@ function renderRouteItem(route: Route): HTMLElement {
         onclick: () => run(() => optimize(route)),
       }, "optimize"),
       h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
-      h("button", {
-        title: "Edit tags",
-        onclick: () =>
-          run(async () => {
-            const tags = await askTags(route.tags);
-            if (tags === null) return;
-            await api.updateRoute(route.id, { tags });
-            await refresh();
-          }),
-      }, "tags"),
       planPicker(route),
       h("button", {
         title: "Delete route",
@@ -851,12 +876,49 @@ function renderRouteItem(route: Route): HTMLElement {
           }),
       }, "delete"),
     ),
+    renderRouteTags(route),
     ...(expanded
       ? [
           renderStops(route),
+          renderAddStops(route),
           h("p", { className: "hint stops-hint" }, "The stops stay in this order. After a change, press recalc to draw the line through them."),
         ]
       : []),
+  );
+}
+
+// A route's tags as chips: × removes one, "+ tag" adds one (comma-separated adds several) and keeps the rest.
+function renderRouteTags(route: Route): HTMLElement {
+  const save = (tags: string[]) =>
+    run(async () => {
+      await api.updateRoute(route.id, { tags });
+      await refresh();
+    });
+  return h(
+    "div",
+    { className: "tag-chips" },
+    ...route.tags.map((tag) =>
+      h(
+        "span",
+        { className: "tag-chip" },
+        tag,
+        h("button", {
+          title: `Remove the "${tag}" tag from this route`,
+          "aria-label": `Remove tag ${tag}`,
+          onclick: () => save(route.tags.filter((t) => t !== tag)),
+        }, "×"),
+      ),
+    ),
+    h("button", {
+      className: "add-tag",
+      title: "Add a tag to this route",
+      onclick: () =>
+        run(async () => {
+          const added = await askTags([]);
+          if (!added || added.length === 0) return;
+          await save([...new Set([...route.tags, ...added.map((t) => t.toLowerCase())])]);
+        }),
+    }, "+ tag"),
   );
 }
 
