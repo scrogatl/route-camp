@@ -43,8 +43,13 @@
         <h2><button class="section-toggle" data-section="routes" aria-expanded="true">Routes</button></h2>
         <div id="routes-body">
           <ul id="route-list"></ul>
+          <div class="row">
+            <input id="route-tag-input" placeholder="tag name" />
+            <button id="route-tag-selected" title="Add this tag to the ticked routes">Tag selected</button>
+            <button id="route-untag-selected" title="Remove this tag from the ticked routes">Untag</button>
+          </div>
           <p id="route-summary" class="hint"></p>
-          <button id="map-clear" title="Hide the route line and untick POIs (nothing is deleted)">Clear map</button>
+          <button id="map-clear" title="Hide the route line and untick POIs and routes (nothing is deleted)">Clear map</button>
         </div>
       </section>
 

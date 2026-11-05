@@ -20,6 +20,7 @@ const state = {
   routes: [] as Route[],
   plans: [] as Plan[],
   selected: [] as number[], // POI ids in the order they were ticked (= route order)
+  selectedRoutes: [] as number[], // ticked route ids, for tagging several routes at once
   shownRouteId: null as number | null,
   shownPlanId: null as number | null,
 };
@@ -72,6 +73,14 @@ function formatDuration(seconds: number): string {
 }
 
 const formatKm = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
+
+// Route row summary: distance, driving time and stop count. Imported GPX tracks have no time until calculated.
+function routeStats(route: Route): string {
+  const stops = `${route.poi_ids.length} stop${route.poi_ids.length === 1 ? "" : "s"}`;
+  if (route.distance_m == null) return `${stops}, not calculated`;
+  const time = route.time_s == null ? "no time (GPX track)" : formatDuration(route.time_s);
+  return `${formatKm(route.distance_m)} · ${time} · ${stops}`;
+}
 
 function routeSummary(route: Route): string {
   if (route.distance_m == null || !route.geometry) return `${route.name}: not calculated yet.`;
@@ -769,6 +778,16 @@ function renderRouteItem(route: Route): HTMLElement {
     h(
       "div",
       { className: "route-head" },
+      h("input", {
+        type: "checkbox",
+        title: "Tick to tag several routes at once",
+        checked: state.selectedRoutes.includes(route.id),
+        onchange: () => {
+          state.selectedRoutes = state.selectedRoutes.includes(route.id)
+            ? state.selectedRoutes.filter((id) => id !== route.id)
+            : [...state.selectedRoutes, route.id];
+        },
+      }),
       h("button", {
         className: "expand",
         title: expanded ? "Hide stops" : "Show stops",
@@ -798,9 +817,7 @@ function renderRouteItem(route: Route): HTMLElement {
         { className: "meta" },
         stale
           ? "order changed, recalc"
-          : route.distance_m == null
-            ? `${route.poi_ids.length} stops, not calculated`
-            : formatKm(route.distance_m),
+          : routeStats(route),
       ),
       h("button", {
         className: stale ? "recalc-route" : "",
@@ -977,6 +994,7 @@ async function refresh(): Promise<void> {
   state.pois = pois;
   state.routes = routes;
   state.plans = plans;
+  state.selectedRoutes = state.selectedRoutes.filter((id) => routes.some((route) => route.id === id));
   renderPois();
   renderRoutes();
   renderPlans();
@@ -1081,6 +1099,28 @@ $("tag-selected").onclick = () =>
     await refresh();
   });
 
+// Tags or untags the ticked routes with the name typed beside the buttons.
+async function tagSelectedRoutes(add: boolean): Promise<void> {
+  const input = $<HTMLInputElement>("route-tag-input");
+  const name = input.value.trim();
+  if (!name || state.selectedRoutes.length === 0) {
+    notify("Type a tag name and tick at least one route.");
+    return;
+  }
+  if (add) {
+    const tag = await api.createTag(name);
+    for (const id of state.selectedRoutes) await api.tagItem(tag.id, "route", id);
+  } else {
+    const tag = (await api.listTags()).find((t) => t.name === name.toLowerCase());
+    if (tag) for (const id of state.selectedRoutes) await api.untagItem(tag.id, "route", id);
+  }
+  input.value = "";
+  await refresh();
+}
+
+$("route-tag-selected").onclick = () => run(() => tagSelectedRoutes(true));
+$("route-untag-selected").onclick = () => run(() => tagSelectedRoutes(false));
+
 $("route-create").onclick = () =>
   run(async () => {
     const name = $<HTMLInputElement>("route-name").value.trim();
@@ -1099,7 +1139,9 @@ $("route-create").onclick = () =>
 $("map-clear").onclick = () => {
   clearShownRoute();
   state.selected = [];
+  state.selectedRoutes = [];
   renderPois();
+  renderRoutes();
   renderMarkers();
 };
 

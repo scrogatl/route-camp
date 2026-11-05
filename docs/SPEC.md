@@ -255,6 +255,10 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   fun) and makes a route from the folder's ticked POIs (in tick order) or, if none are ticked, all of its
   POIs. The stops keep that order, and the line is calculated in it straight away. Nothing reorders the
   stops. Fewer than two POIs is refused.
+- **Route rows** show distance, driving time and stop count ("534.3 km · 8 h 46 min · 16 stops"); an
+  imported GPX track shows "no time" until calculated. Each route has a tick box; ticked routes can be
+  tagged or untagged together with the tag field and **Tag selected** / **Untag** under the list.
+  Clear map also unticks routes.
 - **Routes:** create from ticked POIs with a profile; per route: **show** / **hide** (a button; clicking
   the name also shows it), expand (▸) to list its stops, calc, optimize, GPX download, tags, add to plan
   (a plan picker), delete. The shown route's row is highlighted and its button reads "hide". Showing a
