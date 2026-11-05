@@ -22,13 +22,13 @@ The first start is slow. It downloads the OSM extract for the region (about 350 
 `docker compose logs -f graphhopper`. Routing calls return an error until GraphHopper reports that it is running.
 Later starts reuse both downloads and the graph cache.
 
-Services:
+Services (host ports can be changed with `BACKEND_PORT` and `FRONTEND_PORT` in `.env`):
 
 | Service       | URL                        | Purpose                                      |
 |---------------|----------------------------|----------------------------------------------|
 | frontend      | http://localhost:5173      | Map UI (Vite dev server)                     |
-| backend       | http://localhost:8000/docs | FastAPI app and interactive API docs         |
-| graphhopper   | http://localhost:8989      | Routing HTTP API (`/route`, `/matrix`)       |
+| backend       | http://localhost:8080/docs | FastAPI app and interactive API docs         |
+| graphhopper   | http://localhost:8989      | Routing HTTP API (`/route`)                  |
 
 ## Changing the region
 
@@ -73,7 +73,7 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
 - `backend/app/models.py`: POIs, routes, plans, tags. A route holds ordered `RouteStop` rows pointing at POIs;
   a plan holds ordered `PlanRoute` rows pointing at routes. Tags are many-to-many with each item type.
 - `backend/app/services.py`: shared logic (tag handling, setting stops, GPX import and export).
-- `backend/app/routing.py`: GraphHopper client for `/route` (line for a route) and `/matrix` (travel-time table).
+- `backend/app/routing.py`: GraphHopper client. `/route` gives the line for a route; a travel-time table is built from pairwise `/route` calls because this GraphHopper build has no `/matrix` endpoint.
 - `backend/app/optimize.py`: stop ordering (nearest-neighbour plus 2-opt). It uses GraphHopper's matrix, with a
   haversine fallback if GraphHopper is down.
 - `backend/app/gpx.py`: pure GPX parsing and writing with `gpxpy`.
