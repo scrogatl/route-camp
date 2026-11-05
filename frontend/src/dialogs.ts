@@ -26,6 +26,7 @@ function open(
   const ok = document.createElement("button");
   ok.type = "submit";
   ok.textContent = opts.ok ?? "OK";
+  ok.className = "primary";
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.textContent = opts.cancelLabel ?? "Cancel";

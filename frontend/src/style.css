@@ -1,56 +1,102 @@
+/* The look of rally-route-finder: grey page, white cards, blue accent with orange for warnings and
+   highlights. Blue and orange only, never red/green pairs, for red-green colour blindness. */
 :root {
-  --bg: #ffffff;
-  --fg: #1d1d1f;
-  --muted: #6e6e73;
-  --border: #d2d2d7;
-  --accent: #d9480f;
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --text: #1d2330;
+  --muted: #646b78;
+  --line: #dde1e7;
+  --accent: #1f5fbf;
+  --accent-text: #ffffff;
+  --accent-soft: rgb(31 95 191 / 0.1);
+  --warn-bg: #fff1e0;
+  --warn: #9a4a00;
+  --orange: #e07b00;
+  /* Map colours stay the same in both themes, since the basemap is always light. */
+  --poi: #5b7fb8;
+  --stop: #1f5fbf;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1c1c1e;
-    --fg: #f5f5f7;
-    --muted: #98989d;
-    --border: #3a3a3c;
+    --bg: #14171c;
+    --card: #1d2128;
+    --text: #e6e8ec;
+    --muted: #9aa1ad;
+    --line: #2f3540;
+    --accent: #5b9bff;
+    --accent-text: #0b1220;
+    --accent-soft: rgb(91 155 255 / 0.14);
+    --warn-bg: #3a2a14;
+    --warn: #ffb766;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #1c1c1e;
-  --fg: #f5f5f7;
-  --muted: #98989d;
-  --border: #3a3a3c;
+  --bg: #14171c;
+  --card: #1d2128;
+  --text: #e6e8ec;
+  --muted: #9aa1ad;
+  --line: #2f3540;
+  --accent: #5b9bff;
+  --accent-text: #0b1220;
+  --accent-soft: rgb(91 155 255 / 0.14);
+  --warn-bg: #3a2a14;
+  --warn: #ffb766;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font: 14px/1.4 system-ui, sans-serif;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   background: var(--bg);
-  color: var(--fg);
+  color: var(--text);
   display: flex;
+  flex-direction: column;
   height: 100vh;
 }
+a { color: var(--accent); }
+
+/* Header bar: brand and tagline, as in rally-route-finder. */
+#app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+.brand { font-weight: 700; font-size: 18px; color: var(--text); }
+.tagline { color: var(--muted); font-size: 13px; }
+
+#app { flex: 1; min-height: 0; display: flex; }
 
 #sidebar {
   width: var(--sidebar-width, 340px);
   flex-shrink: 0;
   overflow-y: auto;
-  padding: 12px 16px;
-  border-right: 1px solid var(--border);
+  padding: 10px;
 }
 
-#sidebar h1 { font-size: 18px; margin: 4px 0 8px; }
-#sidebar h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
-#sidebar section { border-top: 1px solid var(--border); padding-bottom: 8px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.card h2 { font-size: 15px; margin: 0 0 8px; }
 
-#map { flex: 1; min-width: 0; }
+#map-view { flex: 1; min-width: 0; position: relative; padding: 10px 10px 10px 0; }
+#map { width: 100%; height: 100%; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
 
 /* Drag handle between the sidebar and the map. */
 #sidebar-resizer {
   flex: 0 0 6px;
-  margin-left: -3px; /* centred on the sidebar's border */
+  margin: 10px 2px;
+  border-radius: 3px;
   cursor: col-resize;
   touch-action: none;
   z-index: 1;
@@ -58,20 +104,56 @@ body {
 #sidebar-resizer:hover, #sidebar-resizer:focus-visible, #sidebar-resizer.dragging { background: var(--accent); }
 body.resizing { cursor: col-resize; user-select: none; }
 
-button, input, select { font: inherit; margin: 2px 0; }
-button { cursor: pointer; padding: 3px 8px; }
-input, select { width: 100%; padding: 3px 6px; }
-input[type="checkbox"], input[type="file"] { width: auto; padding: 0; }
+/* Buttons: outlined by default (the sidebar has many small ones); .primary is the solid rally button. */
+button, .button {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 2px 0;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+button:hover { background: var(--accent-soft); }
+button.primary { background: var(--accent); color: var(--accent-text); padding: 6px 14px; }
+button.primary:hover { filter: brightness(1.08); }
+button.danger { border-color: var(--warn); color: var(--warn); }
+button.danger:hover { background: var(--warn-bg); }
+button:disabled { opacity: 0.4; cursor: default; }
+button:disabled:hover { background: transparent; }
+
+input, select {
+  font: inherit;
+  margin: 2px 0;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+input[type="checkbox"] { width: auto; padding: 0; accent-color: var(--accent); }
+input[type="file"] { width: 100%; padding: 4px; font-size: 13px; }
 label { display: block; margin: 6px 0; }
-.row { display: flex; gap: 6px; }
+
+/* Labelled fields: bold 13px label, muted small hint. */
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field > span { font-weight: 600; font-size: 13px; }
+.field small, .hint small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+
+.row { display: flex; gap: 6px; align-items: center; }
 .row input { flex: 1; }
-.hint { color: var(--muted); font-size: 12px; }
+.hint, .muted { color: var(--muted); font-size: 12px; }
 
 ul { list-style: none; padding: 0; margin: 0; }
 li.item { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 li.item .name { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-li.item .meta { color: var(--muted); font-size: 12px; }
-li.item button { padding: 1px 6px; }
+.meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+li.item button { padding: 1px 7px; }
 
 /* A POI marker and its optional name/score label; the label shows from LABEL_MIN_ZOOM (main.ts). */
 /* No position here: MapLibre positions markers with its own position: absolute, which also anchors
@@ -86,7 +168,7 @@ li.item button { padding: 1px 6px; }
   display: none;
   white-space: nowrap;
   pointer-events: none;
-  color: #1d1d1f;
+  color: #1d2330;
   font: 12px/1.2 system-ui, sans-serif;
   text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
 }
@@ -96,35 +178,37 @@ li.item button { padding: 1px 6px; }
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #2b8a3e;
+  background: var(--poi);
   border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
   cursor: pointer;
 }
-.marker.selected { background: var(--accent); }
+.marker.selected { background: var(--orange); }
 
 @media (max-width: 720px) {
-  body { flex-direction: column; height: auto; }
-  #sidebar { width: auto; border-right: none; }
+  body { height: auto; }
+  #app { flex-direction: column; }
+  #sidebar { width: auto; }
   #sidebar-resizer { display: none; }
-  #map { height: 60vh; }
+  #map-view { height: 60vh; padding: 0 10px 10px; }
 }
 
-li.plan { border-top: 1px dashed var(--border); padding: 6px 0; }
+li.plan { border-top: 1px solid var(--line); padding: 6px 0; }
 .plan-head { display: flex; align-items: center; gap: 4px; }
 .plan-head .name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-ol.plan-routes { margin: 4px 0 4px 16px; }
-button:disabled { opacity: 0.4; cursor: default; }
+ol.plan-routes { margin: 4px 0 4px 16px; padding: 0; }
 
 #app-dialog {
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
   max-width: min(420px, calc(100vw - 32px));
   white-space: pre-line;
 }
-#app-dialog::backdrop { background: rgb(0 0 0 / 0.4); }
-.dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+#app-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
 /* Collapsible sections and folders. The chevron follows aria-expanded. */
 .section-toggle {
@@ -134,9 +218,9 @@ button:disabled { opacity: 0.4; cursor: default; }
   margin: 0;
   color: inherit;
   font: inherit;
-  text-transform: inherit;
   cursor: pointer;
 }
+.section-toggle:hover { background: none; color: var(--accent); }
 [aria-expanded]::before { content: "▾"; display: inline-block; width: 1em; }
 [aria-expanded="false"]::before { content: "▸"; }
 
@@ -150,58 +234,65 @@ button.folder-head {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   text-align: left;
 }
+button.folder-head:hover { background: none; color: var(--accent); }
 ul.folder-items { margin-left: 8px; }
 
 /* Routes: the name gets the full row; actions sit on a line below it. */
-li.route { padding: 4px 0; }
+li.route { padding: 4px 0 4px 4px; border-left: 3px solid transparent; border-radius: 4px; }
 .route-head { display: flex; align-items: center; gap: 4px; }
 .route-head .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .route-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-left: 22px; }
 .route-actions .meta { margin-right: auto; }
 button.expand { background: none; border: 0; padding: 0 2px; margin: 0; color: var(--muted); }
 
-ol.route-stops { margin: 4px 0 4px 22px; }
-ol.route-stops li { display: flex; gap: 6px; padding: 2px 0; }
+ol.route-stops { margin: 4px 0 4px 22px; padding: 0; list-style: none; }
+ol.route-stops li { display: flex; gap: 6px; padding: 2px 0; align-items: center; }
 ol.route-stops .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stop-number { min-width: 1.5em; color: var(--muted); text-align: right; }
+.stop-number { min-width: 1.5em; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Stops of the route on the map: blue, numbered, so they stand apart from other POIs. */
-.marker.stop {
+.marker.stop, .marker.numbered {
   box-sizing: border-box;
   width: auto;
   min-width: 24px;
   height: 24px;
   padding: 0 5px;
   border-radius: 12px;
-  background: #1971c2;
   color: #fff;
-  font: 600 12px/20px system-ui, sans-serif;
+  font: 700 12px/20px system-ui, sans-serif;
   text-align: center;
   white-space: nowrap;
 }
+.marker.stop { background: var(--stop); }
+/* A ticked POI shows its place in the selection order, in orange. */
+.marker.numbered { background: var(--orange); }
 
 /* Folder header row: the toggle takes the width, bulk actions sit at the right. */
-.folder-row { display: flex; align-items: center; gap: 4px; }
-.folder-row button.folder-head { flex: 1; min-width: 0; }
+/* The name takes its own line when the sidebar is too narrow for it and the actions together. */
+.folder-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.folder-row button.folder-head { flex: 1 0 8em; min-width: 0; }
 button.folder-action { font-size: 11px; padding: 0 6px; margin: 0; }
 
 /* Map label choice (name / score / both / none), kept over the map's top-right corner. */
 #label-control {
-  position: fixed;
-  top: 8px;
-  right: 8px;
+  position: absolute;
+  top: 18px;
+  right: 18px;
   z-index: 2;
   padding: 4px 8px;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 12px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
 }
-#label-control label { display: flex; align-items: center; gap: 6px; margin: 0; }
-#label-control select { width: auto; margin: 0; }
+#label-control label { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
+#label-control select { width: auto; margin: 0; padding: 2px 4px; }
 
 /* Undo bar: a non-blocking message at the bottom of the page (dialogs.ts). */
 #undo-bar {
@@ -215,29 +306,28 @@ button.folder-action { font-size: 11px; padding: 0 6px; margin: 0; }
   gap: 10px;
   max-width: calc(100vw - 32px);
   padding: 8px 12px;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
 }
 #undo-bar button { margin: 0; }
 
 /* Route rows: the shown route is highlighted; its name is an obvious link. */
-li.route { border-left: 3px solid transparent; padding-left: 4px; }
-li.route.shown { border-left-color: var(--accent); background: rgb(217 72 15 / 0.12); }
-.route-head .name:hover { text-decoration: underline; }
-button.show-route { font-weight: 600; border: 1px solid var(--accent); border-radius: 4px; }
+li.route.shown { border-left-color: var(--accent); background: var(--accent-soft); }
+.route-head .name:hover { text-decoration: underline; color: var(--accent); }
+button.show-route { background: var(--accent); color: var(--accent-text); }
 .stops-hint { margin: 0 0 4px 22px; }
-.plan-picker { width: auto; max-width: 150px; margin: 0; font-size: 12px; }
+.plan-picker { width: auto; max-width: 150px; margin: 0; padding: 2px 4px; font-size: 12px; }
 
 /* Plans: the shown plan is highlighted; the hint before any plan explains what one is. */
-li.plan.shown { border-left: 3px solid var(--accent); padding-left: 4px; }
+li.plan.shown { border-left: 3px solid var(--accent); padding-left: 4px; background: var(--accent-soft); }
 li.empty-plans { border: 0; padding: 4px 0; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
 
-/* A route whose stops changed: its recalc button stands out. */
-button.recalc-route { font-weight: 600; border: 1px solid var(--accent); border-radius: 4px; }
+/* A route whose stops changed: its recalc button stands out, in the warning orange. */
+button.recalc-route { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
 
 /* Tag chips under a route: × removes a tag, "+ tag" adds one. */
 .tag-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0 4px 22px; }
@@ -246,13 +336,14 @@ button.recalc-route { font-weight: 600; border: 1px solid var(--accent); border-
   align-items: center;
   gap: 2px;
   padding: 0 2px 0 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 10px;
+  background: var(--bg);
   font-size: 11px;
   color: var(--muted);
 }
 .tag-chip button { border: 0; background: none; color: inherit; padding: 0 4px; margin: 0; font-size: 12px; line-height: 1; }
-.tag-chip button:hover { color: var(--accent); }
+.tag-chip button:hover { color: var(--accent); background: none; }
 button.add-tag { font-size: 11px; padding: 0 6px; margin: 0; }
 
 /* Adding stops to an existing route, under its stop list. */

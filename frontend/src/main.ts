@@ -190,7 +190,7 @@ map.on("style.load", () => {
     type: "line",
     source: "route",
     layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": "#d9480f", "line-width": 4 },
+    paint: { "line-color": "#1f5fbf", "line-width": 4 },
   });
   map.addSource("preview", { type: "geojson", data: emptyLine });
   map.addLayer({
@@ -198,7 +198,7 @@ map.on("style.load", () => {
     type: "line",
     source: "preview",
     layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": "#1971c2", "line-width": 4, "line-dasharray": [2, 2] },
+    paint: { "line-color": "#e07b00", "line-width": 4, "line-dasharray": [2, 2] },
   });
   map.addSource("plan", { type: "geojson", data: emptyLine });
   map.addLayer({
@@ -260,9 +260,12 @@ function renderMarkers(): void {
   const stops = stopLabels();
   markers = state.pois.map((poi) => {
     const stop = stops.get(poi.id);
+    // A ticked POI that is not a stop of the shown route shows its place in the selection order.
+    const order = state.selected.indexOf(poi.id) + 1;
     const classes = ["marker"];
-    if (state.selected.includes(poi.id)) classes.push("selected");
+    if (order) classes.push("selected");
     if (stop) classes.push("stop");
+    else if (order) classes.push("numbered");
     const label = labelFor(poi);
     const element = h(
       "div",
@@ -271,13 +274,13 @@ function renderMarkers(): void {
         "div",
         {
           className: classes.join(" "),
-          title: stop ? `Stop ${stop}: ${poi.name}` : poi.name,
+          title: stop ? `Stop ${stop}: ${poi.name}` : order ? `Selected ${order}: ${poi.name}` : poi.name,
           onclick: (event: Event) => {
             event.stopPropagation();
             toggleSelected(poi.id);
           },
         },
-        stop ?? "",
+        stop ?? (order ? String(order) : ""),
       ),
       ...(label ? [h("span", { className: "poi-label" }, label)] : []),
     );
@@ -342,7 +345,8 @@ function clearShownRoute(): void {
 }
 
 // Draws every calculated route of a plan together, each in its own colour, and fits the map to them.
-const PLAN_COLORS = ["#d9480f", "#1971c2", "#2b8a3e", "#9c36b5", "#e8590c", "#0c8599"];
+// Blues and oranges only (no red/green pairs), alternating so neighbouring days stand apart.
+const PLAN_COLORS = ["#1f5fbf", "#e07b00", "#0b3d91", "#ffb766", "#5b9bff", "#9a4a00"];
 
 function showPlan(plan: Plan): void {
   state.shownPlanId = plan.id;
@@ -485,6 +489,7 @@ function renderPoiItem(poi: POI): HTMLElement {
     h("span", { className: "meta", title: "Score" }, poi.score == null ? "" : String(poi.score)),
     h("button", { title: "Set the score", onclick: () => run(() => editScore(poi)) }, "score"),
     h("button", {
+      className: "danger",
       title: "Delete POI",
       onclick: () =>
         run(async () => {
@@ -684,7 +689,7 @@ async function reviewOrder(route: Route, preview: OptimizePreview): Promise<void
     `Current order: ${orderTotals(preview.current)}.`,
     `Proposed order: ${orderTotals(preview.proposed)}.`,
     preview.geometry
-      ? "The dashed blue line is the proposed route."
+      ? "The dashed orange line is the proposed route."
       : "GraphHopper gave no line for the proposed order.",
     "Accept saves the new order and calculates the line. Reject changes nothing.",
   ].join("\n");
@@ -866,6 +871,7 @@ function renderRouteItem(route: Route): HTMLElement {
       h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
       planPicker(route),
       h("button", {
+        className: "danger",
         title: "Delete route",
         onclick: () =>
           run(async () => {
@@ -1002,6 +1008,7 @@ function renderPlans(): void {
               }),
           }, "tags"),
           h("button", {
+            className: "danger",
             title: "Delete plan",
             onclick: () =>
               run(async () => {
