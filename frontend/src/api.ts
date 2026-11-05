@@ -8,6 +8,7 @@ export interface POI {
   lat: number;
   lon: number;
   notes: string | null;
+  score: number | null;
   tags: string[];
 }
 
@@ -93,6 +94,7 @@ export const api = {
   listPois: () => request<POI[]>("/pois"),
   createPoi: (poi: { name: string; lat: number; lon: number; tags?: string[] }) =>
     request<POI>("/pois", send("POST", poi)),
+  updatePoi: (id: number, patch: Partial<Pick<POI, "score">>) => request<POI>(`/pois/${id}`, send("PATCH", patch)),
   deletePoi: (id: number) => request<void>(`/pois/${id}`, send("DELETE")),
 
   listRoutes: () => request<Route[]>("/routes"),

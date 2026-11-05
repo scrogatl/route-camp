@@ -302,6 +302,19 @@ function toggleSelected(poiId: number): void {
   renderMarkers();
 }
 
+// Sets or clears a POI's score. Blank clears it; anything else must be a whole number of zero or more.
+async function editScore(poi: POI): Promise<void> {
+  const input = await askText(`Score for "${poi.name}" (blank clears it)?`, poi.score == null ? "" : String(poi.score));
+  if (input === null) return;
+  const text = input.trim();
+  if (text !== "" && !/^\d+$/.test(text)) {
+    notify("A score is a whole number, 0 or more.");
+    return;
+  }
+  await api.updatePoi(poi.id, { score: text === "" ? null : Number(text) });
+  await refresh();
+}
+
 function renderPoiItem(poi: POI): HTMLElement {
   return h(
     "li",
@@ -320,6 +333,8 @@ function renderPoiItem(poi: POI): HTMLElement {
       },
       poi.name,
     ),
+    h("span", { className: "meta", title: "Score" }, poi.score == null ? "" : String(poi.score)),
+    h("button", { title: "Set the score", onclick: () => run(() => editScore(poi)) }, "score"),
     h("button", {
       title: "Delete POI",
       onclick: () =>
