@@ -62,8 +62,8 @@ li.item .meta { color: var(--muted); font-size: 12px; }
 li.item button { padding: 1px 6px; }
 
 .marker {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #2b8a3e;
   border: 2px solid #fff;
@@ -139,13 +139,13 @@ ol.route-stops .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden;
 .marker.stop {
   box-sizing: border-box;
   width: auto;
-  min-width: 22px;
-  height: 22px;
+  min-width: 24px;
+  height: 24px;
   padding: 0 5px;
-  border-radius: 11px;
+  border-radius: 12px;
   background: #1971c2;
   color: #fff;
-  font: 600 12px/18px system-ui, sans-serif;
+  font: 600 12px/20px system-ui, sans-serif;
   text-align: center;
   white-space: nowrap;
 }
@@ -154,3 +154,19 @@ ol.route-stops .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden;
 .folder-row { display: flex; align-items: center; gap: 4px; }
 .folder-row button.folder-head { flex: 1; min-width: 0; }
 button.folder-action { font-size: 11px; padding: 0 6px; margin: 0; }
+
+/* Map label choice (name / score / both / none), kept over the map's top-right corner. */
+#label-control {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 4px 8px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+#label-control label { display: flex; align-items: center; gap: 6px; margin: 0; }
+#label-control select { width: auto; margin: 0; }
