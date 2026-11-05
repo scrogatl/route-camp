@@ -110,7 +110,7 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | `GET /tags/{id}/items` | All POIs, routes and plans with that tag |
 | `POST /tags/{id}/items` `{kind, id}` · `DELETE /tags/{id}/items/{kind}/{item_id}` | Tag / untag any item |
 | `POST /gpx/import` (multipart `file`) | Import a GPX file; returns what was created vs. matched |
-| `GET /routes/{id}/gpx` | Download a route as GPX |
+| `GET /routes/{id}/gpx?shaping_km=` | Download a route as GPX; `shaping_km` overrides the shaping-point spacing (0 = none) |
 
 ### Routing (`backend/app/routing.py`)
 
@@ -143,11 +143,32 @@ start). OR-Tools or VROOM is the planned upgrade when time windows, a return leg
 
 ### GPX export
 
-One file per route: `wpt` for each unique POI, one `rte` with the stops in order, and a `trk` with the
-cached line when there is one. Creator is `route-camp`. **Verified on a Garmin zūmo 396:** the file
-imports as a trip and matches the planned line. On a real ride (November 2026, route "Walmart-Nav-Test")
-the device recalculated the route while navigating. That was acceptable, but exporting extra shaping
-points along the line, so the device holds the planned roads, stays on the roadmap (section 9).
+One file per route: `wpt` for each unique POI, one `rte`, and a `trk` with the cached line when there
+is one. Creator is `route-camp`.
+
+The `rte` holds the stops in order, with **shaping points** between them when the route has a line
+(`backend/app/shaping.py`):
+- Each stop is marked as a Garmin via point and each extra point as a shaping point, using Garmin's
+  trip extensions (namespace `http://www.garmin.com/xmlschemas/TripExtensions/v1`, prefix `trp`:
+  `<trp:ViaPoint>` with `CalculationMode` FasterTime and `ElevationMode` Standard, or
+  `<trp:ShapingPoint/>`). The device routes through shaping points without announcing them.
+- Shaping points are vertices of the cached line, so they sit on the planned road. Each stop is matched
+  to its nearest line vertex, never moving backwards along the line, which splits the line into legs.
+- Within a leg, a point is taken roughly every `shaping_spacing_km` (default 10 km), and none closer
+  than half a spacing to either stop. Short legs get none (an 8 km route gets no shaping points).
+- Stops plus shaping points are kept within `max_route_points` (default 50) by widening the spacing
+  by 25% at a time until they fit. The right limit for the zūmo 396 is not confirmed; lower it if the
+  device rejects or trims a trip.
+- Shaping points are named "Shaping 1", "Shaping 2", and so on.
+- On import, route points marked `trp:ShapingPoint` are skipped: they never become POIs, so
+  re-importing an export (or a BaseCamp file with shaping points) matches the existing route.
+
+Example: the 301 km "Test1" route exports 2 stops and 28 shaping points.
+
+**Garmin testing:** on a zūmo 396 the file imports as a trip and matches the planned line. On a real
+ride (November 2026, route "Walmart-Nav-Test", exported before shaping points existed) the device
+recalculated the route while navigating, which was acceptable. Shaping points were then added to
+keep recalculation on the planned roads; they have not yet been ridden.
 
 ## 5. GraphHopper setup
 
@@ -213,7 +234,8 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
 | `FRONTEND_PORT` | `5173` | Host port for the app |
 
 Backend settings use the `ROUTE_CAMP_` prefix: `DATABASE_URL`, `GRAPHHOPPER_URL`, `MAP_STYLE_URL`,
-`CORS_ORIGINS`.
+`CORS_ORIGINS`, `SHAPING_SPACING_KM` (default 10; 0 turns shaping points off) and `MAX_ROUTE_POINTS`
+(default 50).
 
 ```bash
 docker compose up -d --build                                              # production build
@@ -225,15 +247,15 @@ Data lives in `./data` (git-ignored): `osm/` (extract), `graph-cache/` (GraphHop
 
 ## 8. Tests
 
-`backend/tests`, 30 tests, none need GraphHopper (it is faked): models and cascades, geometry
+`backend/tests`, 36 tests, none need GraphHopper (it is faked): models and cascades, geometry
 (haversine, simplification), GPX parse/build round trip, optimize, the REST API, plans API (totals,
-reorder, tags), track import and re-import de-duplication. There are no frontend tests; UI checks were
+reorder, tags), track import and re-import de-duplication, shaping-point spacing, budget and round trip. There are no frontend tests; UI checks were
 done by hand in a browser.
 
 ## 9. Known gaps and next steps
 
-- Garmin shaping points: export extra shaping points along the calculated line (not just the POI
-  stops) so the device's recalculation stays on the planned roads, especially "fun" back roads.
+- Garmin shaping points: ride a route exported with them to confirm the zūmo keeps to the planned
+  roads, and confirm the device's limit on route points (`max_route_points`).
 - The "fun" profile only re-weights road classes. A curvature-based model would be closer to Kurviger.
 - Route names get cut off in the sidebar because the row's buttons take most of the width.
 - No login, single user. Before hosting publicly: add auth, move to Postgres, add Alembic, and pick a

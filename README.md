@@ -86,7 +86,9 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
     start/end POIs and length (within 2%, or 500 m). The import message lists what was created and what was already there.
   - An imported track is marked as such. **calc** and **optimize** ask before replacing it, because calculating
     gives a GraphHopper line instead. Changing a route's stops or profile also clears the cached line.
-  - Each route's **GPX** link exports waypoints, route points and the cached line as a track.
+  - Each route's **GPX** link exports waypoints, route points and the cached line as a track. The route points
+    include Garmin shaping points about every 10 km along the line, so a Garmin that recalculates stays on the
+    planned roads (`SHAPING_SPACING_KM` and `MAX_ROUTE_POINTS` in `.env`; see `docs/SPEC.md`).
 
 ## Architecture
 
@@ -103,6 +105,7 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
 - `backend/app/models.py`: POIs, routes, plans, tags. A route holds ordered `RouteStop` rows pointing at POIs;
   a plan holds ordered `PlanRoute` rows pointing at routes. Tags are many-to-many with each item type.
 - `backend/app/services.py`: shared logic (tag handling, setting stops, GPX import and export).
+- `backend/app/shaping.py`: picks Garmin shaping points along a route's line.
 - `backend/app/routing.py`: GraphHopper client. `/route` gives the line for a route; a travel-time table is built from pairwise `/route` calls because this GraphHopper build has no `/matrix` endpoint.
 - `backend/app/optimize.py`: stop ordering (nearest-neighbour plus 2-opt). It uses GraphHopper's matrix, with a
   haversine fallback if GraphHopper is down.

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.geo import haversine_m, path_length_m, simplify
 from app.gpx import GpxPoint, GpxTrack, ParsedGpx, build_route_gpx
 from app.models import POI, Base, Plan, PlanRoute, Route, RouteStop, Tag
+from app.shaping import shaping_points
 
 COORD_TOLERANCE = 1e-6  # ~10 cm; used to match GPX points to existing POIs
 TRACK_END_MATCH_M = 500  # a track end this close to a route's stop counts as the same place
@@ -140,13 +141,15 @@ def import_gpx(session: Session, parsed: ParsedGpx) -> ImportSummary:
     # (route, name, first point, last point) for every rte in this file, used to attach tracks.
     rte_ends: list[tuple[Route, str, GpxPoint, GpxPoint]] = []
     for index, gpx_route in enumerate(parsed.routes, start=1):
-        if not gpx_route.points:
+        # Shaping points only steer the device; they are not places, so they never become POIs.
+        points = [point for point in gpx_route.points if not point.shaping]
+        if not points:
             continue
         name = gpx_route.name or f"Imported route {index}"
-        stops = [resolve_poi(point) for point in gpx_route.points]
+        stops = [resolve_poi(point) for point in points]
         route, created = _find_or_create_route(session, name, [stop.id for stop in stops])
         record(route, "route", "created" if created else "matched")
-        rte_ends.append((route, name, gpx_route.points[0], gpx_route.points[-1]))
+        rte_ends.append((route, name, points[0], points[-1]))
 
     for index, track in enumerate(parsed.tracks, start=1):
         if len(track.points) < 2:
@@ -206,13 +209,25 @@ def _gpx_point(poi: POI) -> GpxPoint:
     return GpxPoint(name=poi.name, lat=poi.lat, lon=poi.lon, desc=poi.notes)
 
 
-def export_route_gpx(route: Route) -> str:
+def export_route_gpx(route: Route, shaping_spacing_m: float = 0, max_route_points: int = 50) -> str:
+    """Shaping points are added between the stops when the route has a line and shaping_spacing_m > 0."""
     stops = [stop.poi for stop in route.stops]
     unique_pois = {poi.id: poi for poi in stops}
     geometry = [(lat, lon) for lon, lat in route.geometry] if route.geometry else None
+    route_points = [_gpx_point(stops[0])] if stops else []
+    if stops and geometry:
+        legs = shaping_points(geometry, [(poi.lat, poi.lon) for poi in stops], shaping_spacing_m, max_route_points)
+    else:
+        legs = [[] for _ in stops[1:]]
+    count = 0
+    for leg, poi in zip(legs, stops[1:]):
+        for lat, lon in leg:
+            count += 1
+            route_points.append(GpxPoint(name=f"Shaping {count}", lat=lat, lon=lon, shaping=True))
+        route_points.append(_gpx_point(poi))
     return build_route_gpx(
         route_name=route.name,
         waypoints=[_gpx_point(poi) for poi in unique_pois.values()],
-        route_points=[_gpx_point(poi) for poi in stops],
+        route_points=route_points,
         geometry=geometry,
     )

@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     # Served to the frontend through /api/config.
     map_style_url: str = "https://tiles.openfreemap.org/styles/liberty"
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Garmin export: a shaping point roughly every this many km along the calculated line (0 turns them off),
+    # and the most route points (stops + shaping points) one exported route may have.
+    shaping_spacing_km: float = 10.0
+    max_route_points: int = 50
 
 
 @lru_cache

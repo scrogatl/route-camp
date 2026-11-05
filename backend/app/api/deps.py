@@ -3,6 +3,7 @@ from typing import TypeVar
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.config import Settings
 from app.models import Base, POI, Plan, Route
 from app.routing import GraphHopperClient
 
@@ -20,3 +21,7 @@ def get_or_404(session: Session, model: type[M], item_id: int) -> M:
 
 def get_graphhopper(request: Request) -> GraphHopperClient:
     return request.app.state.graphhopper
+
+
+def get_app_settings(request: Request) -> Settings:
+    return request.app.state.settings

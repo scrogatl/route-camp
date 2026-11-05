@@ -2,8 +2,15 @@
 
 from dataclasses import dataclass, field
 
+import xml.etree.ElementTree as ET
+
 import gpxpy
 from gpxpy.gpx import GPX, GPXRoute, GPXRoutePoint, GPXTrack, GPXTrackPoint, GPXTrackSegment, GPXWaypoint
+
+
+# Garmin's trip extensions mark each route point as a via point (a stop the device announces) or a shaping
+# point (the device routes through it silently). Without them, devices treat every route point as a stop.
+TRIP_NS = "http://www.garmin.com/xmlschemas/TripExtensions/v1"
 
 
 @dataclass
@@ -12,6 +19,20 @@ class GpxPoint:
     lat: float
     lon: float
     desc: str | None = None
+    shaping: bool = False  # route points only: a Garmin shaping point rather than a stop
+
+
+def _is_shaping(point) -> bool:
+    return any(ext.tag == f"{{{TRIP_NS}}}ShapingPoint" for ext in point.extensions)
+
+
+def _trip_extension(shaping: bool) -> ET.Element:
+    if shaping:
+        return ET.Element(f"{{{TRIP_NS}}}ShapingPoint")
+    via = ET.Element(f"{{{TRIP_NS}}}ViaPoint")
+    ET.SubElement(via, f"{{{TRIP_NS}}}CalculationMode").text = "FasterTime"
+    ET.SubElement(via, f"{{{TRIP_NS}}}ElevationMode").text = "Standard"
+    return via
 
 
 @dataclass
@@ -40,7 +61,10 @@ def parse_gpx(data: str | bytes) -> ParsedGpx:
     return ParsedGpx(
         waypoints=[GpxPoint(w.name, w.latitude, w.longitude, w.description) for w in gpx.waypoints],
         routes=[
-            GpxRoute(r.name, [GpxPoint(p.name, p.latitude, p.longitude, p.description) for p in r.points])
+            GpxRoute(
+                r.name,
+                [GpxPoint(p.name, p.latitude, p.longitude, p.description, _is_shaping(p)) for p in r.points],
+            )
             for r in gpx.routes
         ],
         tracks=[
@@ -56,16 +80,20 @@ def build_route_gpx(
     route_points: list[GpxPoint],
     geometry: list[tuple[float, float]] | None = None,
 ) -> str:
-    """Waypoints = unique POIs, rtept = the route's ordered stops, trk = cached calculated line (lat, lon)."""
+    """Waypoints = unique POIs, rtept = the route's ordered stops (plus any shaping points between them, each
+    marked with Garmin's trip extensions), trk = cached calculated line (lat, lon)."""
     gpx = GPX()
     gpx.creator = "route-camp"
+    gpx.nsmap["trp"] = TRIP_NS
     gpx.waypoints = [
         GPXWaypoint(latitude=p.lat, longitude=p.lon, name=p.name, description=p.desc) for p in waypoints
     ]
     route = GPXRoute(name=route_name)
-    route.points = [
-        GPXRoutePoint(latitude=p.lat, longitude=p.lon, name=p.name, description=p.desc) for p in route_points
-    ]
+    route.points = []
+    for p in route_points:
+        point = GPXRoutePoint(latitude=p.lat, longitude=p.lon, name=p.name, description=p.desc)
+        point.extensions.append(_trip_extension(p.shaping))
+        route.points.append(point)
     gpx.routes.append(route)
     if geometry:
         segment = GPXTrackSegment()

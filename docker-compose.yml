@@ -50,6 +50,8 @@ services:
       ROUTE_CAMP_GRAPHHOPPER_URL: http://graphhopper:8989
       ROUTE_CAMP_CORS_ORIGINS: '["http://localhost:5173"]'
       ROUTE_CAMP_MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+      ROUTE_CAMP_SHAPING_SPACING_KM: ${SHAPING_SPACING_KM:-10}
+      ROUTE_CAMP_MAX_ROUTE_POINTS: ${MAX_ROUTE_POINTS:-50}
     volumes:
       - ./data/db:/data/db
     ports:
