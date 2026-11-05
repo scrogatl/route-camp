@@ -60,3 +60,42 @@ export async function askConfirm(message: string, ok = "OK"): Promise<boolean> {
 export function askText(message: string, initial = ""): Promise<string | null> {
   return open(message, { input: initial, cancel: true });
 }
+
+// Non-blocking bar at the bottom of the page, for a change that can be undone. It goes away after
+// UNDO_MS, when dismissed, when its action runs, or when hideUndo() is called (the app calls that
+// before every change, so an old undo can't reverse a newer one).
+const UNDO_MS = 10_000;
+let undoBar: HTMLElement | null = null;
+let undoTimer: number | undefined;
+
+export function hideUndo(): void {
+  window.clearTimeout(undoTimer);
+  undoBar?.remove();
+  undoBar = null;
+}
+
+export function showUndo(message: string, action: () => void, label = "Undo"): void {
+  hideUndo();
+  const text = document.createElement("span");
+  text.textContent = message;
+  const actionButton = document.createElement("button");
+  actionButton.type = "button";
+  actionButton.textContent = label;
+  actionButton.onclick = () => {
+    hideUndo();
+    action();
+  };
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.textContent = "×";
+  dismiss.title = "Dismiss";
+  dismiss.setAttribute("aria-label", "Dismiss");
+  dismiss.onclick = hideUndo;
+
+  undoBar = document.createElement("div");
+  undoBar.id = "undo-bar";
+  undoBar.setAttribute("role", "status");
+  undoBar.append(text, actionButton, dismiss);
+  document.body.append(undoBar);
+  undoTimer = window.setTimeout(hideUndo, UNDO_MS);
+}

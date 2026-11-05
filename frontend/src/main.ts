@@ -1,7 +1,7 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { askConfirm, askText, showMessage } from "./dialogs";
+import { askConfirm, askText, hideUndo, showMessage, showUndo } from "./dialogs";
 import { api, type ImportSummary, type Plan, type POI, type Profile, type Route } from "./api";
 
 // Minimal app state. The server is the source of truth; refresh() reloads everything after each change.
@@ -44,6 +44,7 @@ function notify(message: string): void {
 }
 
 async function run(action: () => Promise<void>): Promise<void> {
+  hideUndo(); // any new action ends the chance to undo the previous one
   try {
     await action();
   } catch (err) {
@@ -375,11 +376,24 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
         const message = `Remove the "${tag}" tag from all ${pois.length} POIs? The POIs are kept.`;
         if (!(await askConfirm(message, "Untag all"))) return;
         const found = (await api.listTags()).find((t) => t.name === tag);
-        if (found) await forEachPoi(pois, (poi) => api.untagItem(found.id, "poi", poi.id));
+        if (!found) return;
+        const ids = pois.map((poi) => poi.id);
+        await forEachPoi(pois, (poi) => api.untagItem(found.id, "poi", poi.id));
         await refresh();
+        showUndo(`Removed "${tag}" from ${ids.length} POIs.`, () => run(() => retagPois(tag, ids)));
       }),
   }, "untag all");
   return [selectAll, tagAll, untagAll];
+}
+
+// Puts a tag back on exactly these POIs (those still in the library), recreating the tag if it was deleted.
+async function retagPois(tagName: string, ids: number[]): Promise<void> {
+  const tag = await api.createTag(tagName);
+  const present = new Set(state.pois.map((poi) => poi.id));
+  for (const id of ids) {
+    if (present.has(id)) await api.tagItem(tag.id, "poi", id);
+  }
+  await refresh();
 }
 
 function renderPois(): void {
