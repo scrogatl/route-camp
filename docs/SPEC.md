@@ -206,11 +206,20 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   On narrow screens the sidebar stacks above the map.
 - State is minimal; the server is the source of truth and `refresh()` reloads everything after each
   change. DOM is built with a small `h()` helper that sets user text as text, never HTML.
-- **POIs:** markers on the map; click the map to add a POI (asks for a name); tick POIs in the list
-  (tick order is route order); filter by tag; tag the ticked POIs; delete.
-- **Routes:** create from ticked POIs with a profile; per route: show (click name), calc, optimize, GPX
-  download, delete. Showing a route draws its line and fits the map to it. **Clear map** hides the line
-  and unticks everything without deleting anything.
+- **Folders are tags.** The POI and route lists are grouped by tag, client-side (`renderFolders()` in
+  `main.ts`). An item with several tags appears in each of its folders; untagged items go in a last
+  "Untagged" folder. Each folder header shows the name and count and collapses on click. The old tag
+  filter was removed, since folders do the same job.
+- **Sections collapse:** the POIs, Routes and Plans headers toggle their body. Collapsed sections and
+  folders are remembered in `localStorage` under `route-camp.collapsed` (a list of keys such as
+  `section/pois` or `poi/<tag>`), wrapped in try/catch because storage can be unavailable.
+- **POIs:** markers on the map; click the map to add a POI (asks for a name); tick POIs in a folder
+  (tick order is route order); click a name to fly to it; tag the ticked POIs; delete.
+- **Routes:** create from ticked POIs with a profile; per route: show (click name), expand (▸) to list
+  its stops in order (click one to fly to it), calc, optimize, GPX download, tags, delete. Tags are set
+  from the route row with the same dialog as plans. Showing a route draws its line, fits the map to
+  it, and numbers its stops on the map in blue (a POI used twice shows "2,5"). **Clear map** hides the
+  line, removes the stop numbers and unticks everything without deleting anything.
 - **Plans:** create, rename, edit tags, delete; add routes, reorder (up/down), remove; totals shown.
 - **Dialogs:** never use `alert`, `confirm` or `prompt`. Embedded browsers (including the Claude
   desktop app's browser pane) block them, and `confirm()` then returns false, which made delete buttons
@@ -257,7 +266,6 @@ done by hand in a browser.
 - Garmin shaping points: ride a route exported with them to confirm the zūmo keeps to the planned
   roads, and confirm the device's limit on route points (`max_route_points`).
 - The "fun" profile only re-weights road classes. A curvature-based model would be closer to Kurviger.
-- Route names get cut off in the sidebar because the row's buttons take most of the width.
 - No login, single user. Before hosting publicly: add auth, move to Postgres, add Alembic, and pick a
   tile source with terms suitable for the traffic.
 - Sync SQLAlchemy runs inside FastAPI handlers (fine for one user); GPX import reads the whole file into
