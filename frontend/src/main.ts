@@ -1,12 +1,13 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { api, type Profile, type POI, type Route, type Tag } from "./api";
+import { api, type ImportSummary, type Plan, type POI, type Profile, type Route, type Tag } from "./api";
 
 // Minimal app state. The server is the source of truth; refresh() reloads everything after each change.
 const state = {
   pois: [] as POI[],
   routes: [] as Route[],
+  plans: [] as Plan[],
   selected: [] as number[], // POI ids in the order they were ticked (= route order)
   shownRouteId: null as number | null,
 };
@@ -50,6 +51,48 @@ function formatDuration(seconds: number): string {
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 
+const formatKm = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
+
+function routeSummary(route: Route): string {
+  if (route.distance_m == null || !route.geometry) return `${route.name}: not calculated yet.`;
+  const origin = route.geometry_source === "imported" ? "GPX track" : route.profile;
+  const time = route.time_s == null ? "no time" : formatDuration(route.time_s);
+  return `${route.name} (${origin}): ${formatKm(route.distance_m)}, ${time}`;
+}
+
+function planTotals(plan: Plan): string {
+  if (plan.routes_total === 0) return "no routes yet";
+  const parts = [formatKm(plan.distance_m)];
+  if (plan.routes_with_time === 0) {
+    parts.push("no time");
+  } else {
+    parts.push(formatDuration(plan.time_s) + (plan.routes_with_time < plan.routes_total ? " (partial)" : ""));
+  }
+  const missing = plan.routes_total - plan.routes_with_distance;
+  if (missing > 0) parts.push(`${missing} not calculated`);
+  return parts.join(" · ");
+}
+
+function importMessage(summary: ImportSummary): string {
+  const names = (status: ImportSummary["routes"][number]["status"]) =>
+    summary.routes
+      .filter((r) => r.status === status)
+      .map((r) => (r.kind === "track" ? `${r.name} (track)` : r.name));
+  const created = names("created");
+  const matched = names("matched");
+  return [
+    `POIs: ${summary.pois_created} new, ${summary.pois_matched} already there.`,
+    `Routes: ${summary.routes_created} new${created.length ? ` (${created.join(", ")})` : ""}, ` +
+      `${summary.routes_matched} already imported${matched.length ? ` (${matched.join(", ")})` : ""}.`,
+  ].join("\n");
+}
+
+// Calculating or optimizing over an imported GPX track replaces it, so ask first.
+function confirmReplaceImported(route: Route, action: string): boolean {
+  if (route.geometry_source !== "imported") return true;
+  return window.confirm(`"${route.name}" has an imported GPX track. ${action} replaces that track. Continue?`);
+}
+
 const emptyLine = { type: "FeatureCollection", features: [] } as { type: "FeatureCollection"; features: never[] };
 
 // --- Map --------------------------------------------------------------------
@@ -61,6 +104,7 @@ const map = new maplibregl.Map({
   center: [-83.6, 32.9], // Georgia, USA; the default region
   zoom: 6,
 });
+
 // The route layer is added once the style is ready. Not awaited, so a slow or failing basemap
 // style never blocks the sidebar and markers.
 let pendingRoute: Route | null = null;
@@ -106,16 +150,15 @@ map.on("click", (event) =>
 function showRoute(route: Route): void {
   state.shownRouteId = route.id;
   const summary = $("route-summary");
+  summary.textContent = routeSummary(route);
   const source = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
   if (!source) {
     pendingRoute = route; // drawn by the style.load handler
-    summary.textContent = `${route.name}: map is still loading.`;
     return;
   }
   pendingRoute = null;
-  if (!route.geometry || route.geometry.length === 0 || route.distance_m == null || route.time_s == null) {
+  if (!route.geometry || route.geometry.length === 0) {
     source.setData(emptyLine);
-    summary.textContent = `${route.name}: not calculated yet.`;
     return;
   }
   source.setData({
@@ -124,12 +167,8 @@ function showRoute(route: Route): void {
     geometry: { type: "LineString", coordinates: route.geometry },
   });
   const [first, ...rest] = route.geometry;
-  const bounds = rest.reduce(
-    (box, point) => box.extend(point),
-    new maplibregl.LngLatBounds(first, first),
-  );
+  const bounds = rest.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(first, first));
   map.fitBounds(bounds, { padding: 60 });
-  summary.textContent = `${route.name} (${route.profile}): ${(route.distance_m / 1000).toFixed(1)} km, ${formatDuration(route.time_s)}`;
 }
 
 // --- Sidebar: POIs ----------------------------------------------------------
@@ -190,6 +229,24 @@ function renderTagFilter(tags: Tag[]): void {
 
 // --- Sidebar: routes --------------------------------------------------------
 
+async function calculate(route: Route): Promise<void> {
+  if (!confirmReplaceImported(route, "Calculating")) return;
+  const updated = await api.calculateRoute(route.id, route.geometry_source === "imported");
+  await refresh();
+  showRoute(updated);
+}
+
+async function optimize(route: Route): Promise<void> {
+  if (!confirmReplaceImported(route, "Optimizing")) return;
+  const { source } = await api.optimizeRoute(route.id, route.geometry_source === "imported");
+  await refresh();
+  notify(
+    source === "none"
+      ? "Need at least three stops to reorder."
+      : `Stops reordered using ${source} travel times. Calculate the route again to refresh the line.`,
+  );
+}
+
 function renderRoutes(): void {
   $("route-list").replaceChildren(
     ...state.routes.map((route) =>
@@ -199,36 +256,20 @@ function renderRoutes(): void {
         h(
           "span",
           { className: "name", title: route.name, onclick: () => showRoute(route) },
-          `${route.name} (${route.profile})`,
+          `${route.name} (${route.geometry_source === "imported" ? "track" : route.profile})`,
         ),
         h(
           "span",
           { className: "meta" },
-          route.distance_m == null || route.time_s == null
-            ? `${route.poi_ids.length} stops`
-            : `${(route.distance_m / 1000).toFixed(1)} km`,
+          route.distance_m == null ? `${route.poi_ids.length} stops` : formatKm(route.distance_m),
         ),
         h("button", {
           title: "Calculate with GraphHopper",
-          onclick: () =>
-            run(async () => {
-              const updated = await api.calculateRoute(route.id);
-              await refresh();
-              showRoute(updated);
-            }),
+          onclick: () => run(() => calculate(route)),
         }, "calc"),
         h("button", {
           title: "Reorder stops for shortest time",
-          onclick: () =>
-            run(async () => {
-              const { source } = await api.optimizeRoute(route.id);
-              await refresh();
-              const message =
-                source === "none"
-                  ? "Need at least three stops to reorder."
-                  : `Stops reordered using ${source} travel times. Calculate the route again to refresh the line.`;
-              notify(message);
-            }),
+          onclick: () => run(() => optimize(route)),
         }, "optimize"),
         h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
         h("button", {
@@ -239,7 +280,8 @@ function renderRoutes(): void {
               await api.deleteRoute(route.id);
               if (state.shownRouteId === route.id) {
                 state.shownRouteId = null;
-                showRoute({ ...route, geometry: null, distance_m: null, time_s: null });
+                $("route-summary").textContent = "";
+                map.getSource<maplibregl.GeoJSONSource>("route")?.setData(emptyLine);
               }
               await refresh();
             }),
@@ -249,16 +291,129 @@ function renderRoutes(): void {
   );
 }
 
+// --- Sidebar: plans ---------------------------------------------------------
+
+const routeName = (id: number): string => state.routes.find((r) => r.id === id)?.name ?? `route ${id}`;
+
+function setPlanRoutes(plan: Plan, routeIds: number[]): Promise<void> {
+  return run(async () => {
+    await api.updatePlan(plan.id, { route_ids: routeIds });
+    await refresh();
+  });
+}
+
+function addRouteRow(plan: Plan): HTMLElement {
+  const available = state.routes.filter((r) => !plan.route_ids.includes(r.id));
+  const select = h(
+    "select",
+    {},
+    h("option", { value: "" }, available.length ? "add a route…" : "no routes to add"),
+    ...available.map((r) => h("option", { value: String(r.id) }, r.name)),
+  );
+  const add = h("button", {
+    onclick: () => {
+      const id = Number(select.value);
+      if (id) void setPlanRoutes(plan, [...plan.route_ids, id]);
+    },
+  }, "add");
+  return h("div", { className: "row" }, select, add);
+}
+
+function renderPlans(): void {
+  $("plan-list").replaceChildren(
+    ...state.plans.map((plan) =>
+      h(
+        "li",
+        { className: "plan" },
+        h(
+          "div",
+          { className: "plan-head" },
+          h("span", { className: "name", title: plan.name }, plan.name),
+          h("button", {
+            title: "Rename plan",
+            onclick: () =>
+              run(async () => {
+                const name = window.prompt("Plan name?", plan.name)?.trim();
+                if (!name) return;
+                await api.updatePlan(plan.id, { name });
+                await refresh();
+              }),
+          }, "rename"),
+          h("button", {
+            title: "Edit tags",
+            onclick: () =>
+              run(async () => {
+                const input = window.prompt("Tags, comma separated?", plan.tags.join(", "));
+                if (input === null) return;
+                const tags = input.split(",").map((t) => t.trim()).filter(Boolean);
+                await api.updatePlan(plan.id, { tags });
+                await refresh();
+              }),
+          }, "tags"),
+          h("button", {
+            title: "Delete plan",
+            onclick: () =>
+              run(async () => {
+                if (!window.confirm(`Delete plan "${plan.name}"? Its routes are kept.`)) return;
+                await api.deletePlan(plan.id);
+                await refresh();
+              }),
+          }, "×"),
+        ),
+        h(
+          "div",
+          { className: "meta" },
+          planTotals(plan) + (plan.tags.length ? ` · ${plan.tags.join(", ")}` : ""),
+        ),
+        h(
+          "ol",
+          { className: "plan-routes" },
+          ...plan.route_ids.map((id, index) => {
+            const move = (step: number) => {
+              const ids = [...plan.route_ids];
+              [ids[index], ids[index + step]] = [ids[index + step], ids[index]];
+              return setPlanRoutes(plan, ids);
+            };
+            return h(
+              "li",
+              { className: "item" },
+              h("span", { className: "name", title: routeName(id) }, routeName(id)),
+              h("button", { title: "Move up", disabled: index === 0, onclick: () => move(-1) }, "↑"),
+              h("button", {
+                title: "Move down",
+                disabled: index === plan.route_ids.length - 1,
+                onclick: () => move(1),
+              }, "↓"),
+              h("button", {
+                title: "Remove from plan",
+                onclick: () => setPlanRoutes(plan, plan.route_ids.filter((_, i) => i !== index)),
+              }, "×"),
+            );
+          }),
+        ),
+        addRouteRow(plan),
+      ),
+    ),
+  );
+}
+
 // --- Data loading -----------------------------------------------------------
 
 async function refresh(): Promise<void> {
   const tag = $<HTMLSelectElement>("tag-filter").value;
-  const [pois, routes, tags] = await Promise.all([api.listPois(tag), api.listRoutes(), api.listTags()]);
+  const [pois, routes, plans, tags] = await Promise.all([
+    api.listPois(tag),
+    api.listRoutes(),
+    api.listPlans(tag),
+    api.listTags(),
+  ]);
   state.pois = pois;
   state.routes = routes;
+  state.plans = plans;
   renderTagFilter(tags);
   renderPois();
   renderRoutes();
+  renderPlans();
   renderMarkers();
 }
 
@@ -294,6 +449,19 @@ $("route-create").onclick = () =>
     await refresh();
   });
 
+$("plan-create").onclick = () =>
+  run(async () => {
+    const input = $<HTMLInputElement>("plan-name");
+    const name = input.value.trim();
+    if (!name) {
+      notify("Name the plan first.");
+      return;
+    }
+    await api.createPlan({ name });
+    input.value = "";
+    await refresh();
+  });
+
 $("gpx-import").onclick = () =>
   run(async () => {
     const input = $<HTMLInputElement>("gpx-file");
@@ -304,10 +472,7 @@ $("gpx-import").onclick = () =>
     }
     const summary = await api.importGpx(file);
     input.value = "";
-    notify(
-      `Imported ${summary.pois_created} new POIs (${summary.pois_matched} already existed) and ${summary.routes_created} routes.` +
-        (summary.tracks_skipped ? ` ${summary.tracks_skipped} track(s) were skipped.` : ""),
-    );
+    notify(importMessage(summary));
     await refresh();
   });
 

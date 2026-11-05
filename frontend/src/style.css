@@ -76,3 +76,9 @@ li.item button { padding: 1px 6px; }
   #sidebar { width: auto; border-right: none; }
   #map { height: 60vh; }
 }
+
+li.plan { border-top: 1px dashed var(--border); padding: 6px 0; }
+.plan-head { display: flex; align-items: center; gap: 4px; }
+.plan-head .name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ol.plan-routes { margin: 4px 0 4px 16px; }
+button:disabled { opacity: 0.4; cursor: default; }

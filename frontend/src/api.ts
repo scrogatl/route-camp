@@ -20,7 +20,21 @@ export interface Route {
   distance_m: number | null;
   time_s: number | null;
   geometry: LonLat[] | null;
+  geometry_source: "calculated" | "imported" | null;
   tags: string[];
+}
+
+export interface Plan {
+  id: number;
+  name: string;
+  notes: string | null;
+  route_ids: number[];
+  tags: string[];
+  distance_m: number;
+  time_s: number;
+  routes_total: number;
+  routes_with_distance: number;
+  routes_with_time: number;
 }
 
 export interface Tag {
@@ -33,46 +47,75 @@ export interface ClientConfig {
   routing_profiles: Profile[];
 }
 
+export interface ImportedRoute {
+  id: number;
+  name: string;
+  kind: "route" | "track";
+  status: "created" | "matched";
+}
+
 export interface ImportSummary {
   pois_created: number;
   pois_matched: number;
   routes_created: number;
-  tracks_skipped: number;
+  routes_matched: number;
+  routes: ImportedRoute[];
+}
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
-    headers: init.body ? { "Content-Type": "application/json", ...init.headers } : init.headers,
+    headers: init.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
   });
   if (!response.ok) {
-    throw new Error(`${response.status} ${await response.text()}`);
+    throw new ApiError(response.status, `${response.status} ${await response.text()}`);
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
 
-const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+const send = (method: string, body?: unknown): RequestInit => ({
+  method,
+  body: body === undefined ? undefined : JSON.stringify(body),
+});
 
 export const api = {
   config: () => request<ClientConfig>("/config"),
 
   listPois: (tag: string) => request<POI[]>(`/pois${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`),
   createPoi: (poi: { name: string; lat: number; lon: number; tags?: string[] }) =>
-    request<POI>("/pois", json(poi)),
-  deletePoi: (id: number) => request<void>(`/pois/${id}`, { method: "DELETE" }),
+    request<POI>("/pois", send("POST", poi)),
+  deletePoi: (id: number) => request<void>(`/pois/${id}`, send("DELETE")),
 
   listRoutes: () => request<Route[]>("/routes"),
   createRoute: (route: { name: string; profile: Profile; poi_ids: number[] }) =>
-    request<Route>("/routes", json(route)),
-  deleteRoute: (id: number) => request<void>(`/routes/${id}`, { method: "DELETE" }),
-  calculateRoute: (id: number) => request<Route>(`/routes/${id}/calculate`, { method: "POST" }),
-  optimizeRoute: (id: number) =>
-    request<{ route: Route; source: string }>(`/routes/${id}/optimize`, { method: "POST" }),
+    request<Route>("/routes", send("POST", route)),
+  deleteRoute: (id: number) => request<void>(`/routes/${id}`, send("DELETE")),
+  calculateRoute: (id: number, replaceImported: boolean) =>
+    request<Route>(`/routes/${id}/calculate?replace_imported=${replaceImported}`, send("POST")),
+  optimizeRoute: (id: number, replaceImported: boolean) =>
+    request<{ route: Route; source: string }>(`/routes/${id}/optimize?replace_imported=${replaceImported}`, send("POST")),
   routeGpxUrl: (id: number) => `/api/routes/${id}/gpx`,
 
+  listPlans: (tag: string) => request<Plan[]>(`/plans${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`),
+  createPlan: (plan: { name: string; route_ids?: number[]; tags?: string[] }) =>
+    request<Plan>("/plans", send("POST", plan)),
+  updatePlan: (id: number, patch: Partial<Pick<Plan, "name" | "route_ids" | "tags">>) =>
+    request<Plan>(`/plans/${id}`, send("PATCH", patch)),
+  deletePlan: (id: number) => request<void>(`/plans/${id}`, send("DELETE")),
+
   listTags: () => request<Tag[]>("/tags"),
-  createTag: (name: string) => request<Tag>("/tags", json({ name })),
-  tagItem: (tagId: number, kind: ItemKind, id: number) => request<void>(`/tags/${tagId}/items`, json({ kind, id })),
+  createTag: (name: string) => request<Tag>("/tags", send("POST", { name })),
+  tagItem: (tagId: number, kind: ItemKind, id: number) =>
+    request<void>(`/tags/${tagId}/items`, send("POST", { kind, id })),
 
   importGpx: (file: File) => {
     const body = new FormData();
