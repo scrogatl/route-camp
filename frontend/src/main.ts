@@ -340,6 +340,20 @@ async function forEachPoi(pois: POI[], action: (poi: POI) => Promise<void>): Pro
 // "tag all" adds a tag to every POI in the folder; "untag all" takes the folder's own tag off them
 // (they move to their other folders, or to Untagged). Works whether the folder is open or collapsed.
 function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
+  const ids = pois.map((poi) => poi.id);
+  const allTicked = ids.every((id) => state.selected.includes(id));
+  // Ticks the folder's POIs in its displayed order, after any already ticked; unticks them all when every one is ticked.
+  const selectAll = h("button", {
+    className: "folder-action",
+    title: allTicked ? "Untick every POI in this folder" : "Tick every POI in this folder",
+    onclick: () => {
+      state.selected = allTicked
+        ? state.selected.filter((id) => !ids.includes(id))
+        : [...state.selected, ...ids.filter((id) => !state.selected.includes(id))];
+      renderPois();
+      renderMarkers();
+    },
+  }, allTicked ? "unselect" : "select");
   const tagAll = h("button", {
     className: "folder-action",
     title: `Add a tag to all ${pois.length} POIs in this folder`,
@@ -352,7 +366,7 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
         await refresh();
       }),
   }, "tag all");
-  if (!tag) return [tagAll];
+  if (!tag) return [selectAll, tagAll];
   const untagAll = h("button", {
     className: "folder-action",
     title: `Remove the "${tag}" tag from all ${pois.length} POIs`,
@@ -365,7 +379,7 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
         await refresh();
       }),
   }, "untag all");
-  return [tagAll, untagAll];
+  return [selectAll, tagAll, untagAll];
 }
 
 function renderPois(): void {
