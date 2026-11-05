@@ -61,7 +61,8 @@ osm-fetch (one-shot alpine container): downloads the OSM extract into ./data/osm
 Tables (see `backend/app/models.py`):
 
 - **tags**: `id`, `name` (unique). Names are normalised to trimmed lowercase.
-- **pois**: `id`, `name`, `lat`, `lon`, `notes?`, `score?` (integer), `created_at`, `updated_at`.
+- **pois**: `id`, `name`, `lat`, `lon`, `notes?`, `score?` (integer), `state?` (text such as "GA", from a
+  rally CSV), `created_at`, `updated_at`.
 - **routes**: `id`, `name`, `notes?`, `profile` (`car` | `fun`), cached line fields:
   `distance_m?`, `time_s?`, `geometry?` (JSON `[[lon, lat], ...]`), `geometry_source?`
   (`calculated` | `imported`), `calculated_at?`, timestamps.
@@ -89,6 +90,15 @@ All foreign keys use `ON DELETE CASCADE`. SQLite needs `PRAGMA foreign_keys=ON` 
   `backend/app/scores.py`). Set on GPX import for new POIs only, and by the one-off backfill
   `python -m app.backfill_scores`, which fills only empty scores and is never run at startup (so a
   cleared score stays cleared). Edits through the API are explicit; nothing re-parses names.
+- **Rally CSV import** (`backend/app/rally.py`, `import_rally_bonuses()` in `services.py`): the file is
+  rally-route-finder's `bonus-lat-lon-points.csv`, no header (a first line whose lat field starts with
+  "lat" is skipped), one bonus per line: `code, lat, lon, points, state, , ` (trailing fields unused).
+  A state of `N/A` or blank is stored as null. Each bonus matches an existing POI whose name is the code
+  alone ("ABAC") or the code, a space and more ("ABAC 510", as GPX-imported rally POIs are named), with
+  lat/lon within 1e-6°, the GPX tolerance. A match gets the file's points as `score` and its state; its
+  name, tags and notes are never changed. No match creates a POI named by the code, with points and
+  state. A malformed line is a 422 naming the line. The response counts created, matched and updated
+  (matched POIs whose points or state changed).
 - **Plan totals** add up `distance_m` and `time_s` over the plan's routes that have them, and report
   how many routes have a distance or time, so the UI can say "partial".
 
@@ -105,7 +115,7 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | Method and path | Purpose |
 |---|---|
 | `GET /config` | `{map_style_url, routing_profiles: ["car","fun"]}` for the frontend |
-| `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]` and `score` (0 or more, or null) accepted on create/update. PATCH with `score: null` clears it |
+| `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]`, `score` (0 or more, or null) and `state` accepted on create/update. PATCH with `score: null` clears it |
 | `GET /routes` · `POST /routes` · `GET/PATCH/DELETE /routes/{id}` | Route CRUD; body has `name`, `profile`, `poi_ids` (ordered), `tags` |
 | `POST /routes/{id}/calculate?replace_imported=` | GraphHopper line through the stops in order; caches geometry, distance, time. 422 if fewer than 2 stops, 502 if GraphHopper fails |
 | `POST /routes/{id}/optimize?replace_imported=` | Reorders stops for least travel time, first stop fixed, and saves it; returns `{route, source}` where source is `graphhopper`, `haversine` or `none` (under 3 stops). Clears the cached line |
@@ -116,6 +126,7 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | `GET /tags/{id}/items` | All POIs, routes and plans with that tag |
 | `POST /tags/{id}/items` `{kind, id}` · `DELETE /tags/{id}/items/{kind}/{item_id}` | Tag / untag any item |
 | `POST /gpx/import` (multipart `file`) | Import a GPX file; returns what was created vs. matched |
+| `POST /rally/import` (multipart `file`) | Import a rally bonus CSV; returns `{bonuses, pois_created, pois_matched, pois_updated, created: [codes], updated: [names]}` |
 | `GET /routes/{id}/gpx?shaping_km=` | Download a route as GPX; `shaping_km` overrides the shaping-point spacing (0 = none) |
 
 ### Routing (`backend/app/routing.py`)
@@ -209,8 +220,40 @@ Config traps found while building it (each one cost a failed start):
 Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API client), `src/dialogs.ts`,
 `src/style.css`.
 
-- One page: a sidebar on the left (GPX, POIs, new route, routes, plans) and the map filling the rest.
-  On narrow screens the sidebar stacks above the map.
+- **Look:** copied from the user's rally-route-finder (`webapp/static/style.css` there): CSS variables
+  `--bg --card --text --muted --line --accent --accent-text --warn-bg --warn` for light and dark, a grey
+  page with white cards (10 px radius), a header bar with brand and tagline, bold 13 px field labels with
+  muted small hints, solid `.primary` buttons and outlined ones (the default here, because the sidebar
+  has many small buttons; rally's default is solid), `.danger` (warning orange) on delete buttons, and
+  sortable tables with numbers right-aligned. **Blue and orange only, no red/green pairs** (colour
+  blindness): POI markers slate blue, ticked POIs orange, route line and stop numbers blue, the optimize
+  preview dashed orange, plan colours alternate blues and oranges.
+- **Two views**, switched by Map / Bonuses in the header (remembered under `route-camp.view`):
+  - **Map:** a sidebar of cards on the left (Import, Selected, POIs, Routes, Plans) and the map filling
+    the rest. On narrow screens the sidebar stacks above the map.
+  - **Bonuses:** a full-width table of every POI with the Selected card beside it (below it on narrow
+    screens). The same `#selected-card` element is moved between the two places by `setView()`.
+- **One selection:** `state.selected` (POI ids in order) is shared by map markers, the POI folders, the
+  Bonuses table and the Selected card. `renderSelection()` redraws all of them after any change. A
+  ticked marker shows its number in the selection, in orange (stops of a shown route keep their blue
+  stop numbers).
+- **Bonuses table:** columns tick, code / name, points (`score`), state, tags, routes (how many routes
+  the POI is on), notes. Click a heading to sort, again to reverse; numbers sort highest first, text A to
+  Z, blanks last (remembered under `route-camp.bonus-sort`). A filter box matches name, state, notes and
+  tags; a Tag picker narrows to one tag or Untagged. The status line reads "12 selected · 6,480 points ·
+  showing 139 of 139". The header tick box and **Tick shown** / **Untick shown** act on the rows shown;
+  ticking appends after the current selection in the table's order. A ticked row is tinted and shows its
+  order number. Clicking a name switches to the map and flies there.
+- **Selected card:** the ticked bonuses in order, each with a ⠿ drag handle, its number, name, points,
+  ↑ / ↓ and ×, and a points total. Dragging uses pointer events listened for on the window (not pointer
+  capture: moving the row in the DOM drops the capture, which first lost every drag). **Create route in
+  this order** needs a name and two bonuses; it creates the route with exactly that order and calculates
+  the line in it (if GraphHopper fails, the route is kept without a line). **Append** adds the selection
+  to the end of a picked route, in order, skipping stops it already has; like any stop change it clears
+  the line until recalc (and asks first on an imported track). Both clear the selection and show the
+  route on the map. Nothing in the card ever reorders; optimize stays a separate review on a route.
+- **Import card:** one file field for `.gpx` or a rally `.csv`; a `.csv` name goes to `/rally/import`,
+  anything else to `/gpx/import`, and a dialog reports what was created vs matched.
 - The sidebar is resizable: drag the handle on its right edge (or focus it and use the arrow keys);
   double-click resets to 340px. Width is clamped to 220px minimum and always leaves the map 300px, and
   is remembered in `localStorage` under `route-camp.sidebar-width`. The handle is hidden on narrow screens.
@@ -242,7 +285,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
 - **Sections collapse:** the POIs, Routes and Plans headers toggle their body. Collapsed sections and
   folders are remembered in `localStorage` under `route-camp.collapsed` (a list of keys such as
   `section/pois` or `poi/<tag>`), wrapped in try/catch because storage can be unavailable.
-- **POIs:** markers on the map (18 px, white ring; ticked POIs are filled with the accent colour); click
+- **POIs:** markers on the map (18 px, white ring; ticked POIs are orange and numbered by their place in the selection); click
   the map to add a POI (asks for a name); tick POIs in a folder (tick order is route order); click a name
   to fly to it; tag the ticked POIs; delete.
 - **Map labels:** a "Map labels" control at the top right of the map chooses name (the default,
@@ -251,6 +294,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   Labels do not collide-check: dense clusters overlap at zoom 9–10.
   A MapLibre symbol layer was tried first and stalled the basemap style in the browser pane, so it was
   dropped.
+- The old "New route" card (create from ticked POIs, uncalculated) was replaced by the Selected card.
 - **Route from a folder:** each POI folder header has "route". It asks for a name and a profile (car or
   fun) and makes a route from the folder's ticked POIs (in tick order) or, if none are ticked, all of its
   POIs. The stops keep that order, and the line is calculated in it straight away. Nothing reorders the
@@ -275,7 +319,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   calculates the line through the stops in the order the user set. Nothing reorders or recalculates on
   its own; optimize only runs when clicked, through the accept / reject review.
 - **Optimize is a review:** optimize asks the preview endpoint and opens a dialog with the current and
-  proposed distance and time, Accept or Reject. The proposed line is drawn dashed blue while the dialog is
+  proposed distance and time, Accept or Reject. The proposed line is drawn dashed orange while the dialog is
   open. Reject changes nothing. Accept saves the new order and calculates the line. Under three stops it
   says so and does not open the dialog.
 - **Plans:** a plan is one trip made of routes in order, such as Day 1 and Day 2. The Plans section says
@@ -319,9 +363,11 @@ Data lives in `./data` (git-ignored): `osm/` (extract), `graph-cache/` (GraphHop
 
 ## 8. Tests
 
-`backend/tests`, 47 tests, none need GraphHopper (it is faked): models and cascades, geometry
+`backend/tests`, 54 tests, none need GraphHopper (it is faked): models and cascades, geometry
 (haversine, simplification), GPX parse/build round trip, optimize, the REST API, plans API (totals,
-reorder, tags), track import and re-import de-duplication, shaping-point spacing, budget and round trip. There are no frontend tests; UI checks were
+reorder, tags), track import and re-import de-duplication, shaping-point spacing, budget and round trip, and the
+rally CSV (parsing, header and bad lines, creating, matching "CODE" and "CODE points" names, no
+duplicates on re-import, names/tags/notes kept). There are no frontend tests; UI checks were
 done by hand in a browser.
 
 ## 9. Known gaps and next steps
@@ -345,6 +391,12 @@ done by hand in a browser.
 - Stop ordering is up/down buttons only. Ordering the POIs of a tag folder as a whole (drag, or a
   "sequence" the folder keeps) is planned for later.
 - The plan view has no map of each plan's stops, and it draws only routes that have a line.
+- Rally features not ported from rally-route-finder yet: choosing the best set of bonuses within a time
+  budget (its solvers), combos, bonus hours (open/close times), late penalties, slow zones, and its login.
+  The Bonuses table only selects and orders by hand.
+- Rally CSV: POIs it creates are named by the code alone ("ABAC"), while GPX-imported rally POIs end in
+  their points ("ABAC 510"); both match on re-import. The file's combo and hours columns are ignored.
+- The selection is in memory: a page reload clears it.
 
 ## 10. Rebuilding from scratch
 
@@ -365,4 +417,5 @@ A sensible order, each step testable on its own:
 
 - Repository: https://github.com/scrogatl/route-camp (branch `main`).
 - November 2026: feasibility review, then first draft scaffolded by a Claude Haiku session; round 2
-  added plans UI, track import, de-dup and the nginx build; then in-page dialogs and Clear map.
+  added plans UI, track import, de-dup and the nginx build; then in-page dialogs and Clear map. Later
+  the rally-route-finder look, the Bonuses table, the ordered Selected card and rally CSV import.
