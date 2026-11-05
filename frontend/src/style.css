@@ -62,7 +62,9 @@ li.item .meta { color: var(--muted); font-size: 12px; }
 li.item button { padding: 1px 6px; }
 
 /* A POI marker and its optional name/score label; the label shows from LABEL_MIN_ZOOM (main.ts). */
-.poi-pin { position: relative; display: inline-block; }
+/* No position here: MapLibre positions markers with its own position: absolute, which also anchors
+   the label. Overriding it puts every marker in normal flow, shifting each one by the ones before it. */
+.poi-pin { display: inline-block; }
 .poi-label {
   position: absolute;
   top: 100%;
