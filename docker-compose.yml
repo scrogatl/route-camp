@@ -1,0 +1,73 @@
+# route-camp: frontend, backend and GraphHopper routing, all from one command.
+#   docker compose up --build
+# Region is controlled by OSM_URL / OSM_FILE / REGION_NAME (see .env.example).
+name: route-camp
+
+x-osm-env: &osm-env
+  OSM_URL: ${OSM_URL:-https://download.geofabrik.de/north-america/us/georgia-latest.osm.pbf}
+  OSM_FILE: ${OSM_FILE:-georgia-latest.osm.pbf}
+  REGION_NAME: ${REGION_NAME:-georgia}
+
+services:
+  osm-fetch:
+    image: alpine:3.20
+    environment:
+      <<: *osm-env
+    volumes:
+      - ./scripts/fetch-osm.sh:/fetch-osm.sh:ro
+      - ./data/osm:/data/osm
+    command: ["sh", "/fetch-osm.sh"]
+    restart: "no"
+
+  graphhopper:
+    image: israelhikingmap/graphhopper:latest
+    depends_on:
+      osm-fetch:
+        condition: service_completed_successfully
+    environment:
+      JAVA_OPTS: "-Xms4g -Xmx4g"
+    entrypoint: ["/graphhopper/graphhopper.sh"]
+    command:
+      - "-i"
+      - "/data/osm/${OSM_FILE:-georgia-latest.osm.pbf}"
+      - "-o"
+      - "/graph-cache/${REGION_NAME:-georgia}"
+      - "-c"
+      - "/config/config.yml"
+    volumes:
+      - ./graphhopper/config.yml:/config/config.yml:ro
+      - ./graphhopper/custom_models:/config/custom_models:ro
+      - ./data/osm:/data/osm:ro
+      - ./data/graph-cache:/graph-cache
+    ports:
+      - "8989:8989"
+      - "8990:8990"
+
+  backend:
+    build: ./backend
+    environment:
+      ROUTE_CAMP_DATABASE_URL: sqlite:////data/db/route_camp.db
+      ROUTE_CAMP_GRAPHHOPPER_URL: http://graphhopper:8989
+      ROUTE_CAMP_CORS_ORIGINS: '["http://localhost:5173"]'
+      ROUTE_CAMP_MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+    volumes:
+      - ./data/db:/data/db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - graphhopper
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    volumes:
+      - ./frontend:/srv
+      - frontend-node-modules:/srv/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  frontend-node-modules:

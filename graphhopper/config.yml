@@ -1,0 +1,46 @@
+# GraphHopper server config. The OSM file and graph-cache path are passed on the command line by docker-compose.yml
+# so the region can be changed through .env without editing this file.
+graphhopper:
+  # Defaults for the OSM file and graph cache. docker-compose.yml overrides both with -i / -o.
+  datareader.file: /data/osm/georgia-latest.osm.pbf
+  # Both profiles are motorized, so skip pedestrian and cycling-only ways (faster import, smaller graph).
+  import.osm.ignored_highways: footway,construction,cycleway,path,steps
+  graph.location: /graph-cache/georgia
+  custom_models.directory: /config/custom_models
+
+  profiles:
+    # Plain car routing using GraphHopper's built-in car model.
+    - name: car
+      custom_model_files: [car.json]
+    # "Fun" driving: the car model plus our fun.json overrides (prefers curvy secondary/tertiary roads).
+    - name: fun
+      custom_model_files: [car.json, fun.json]
+
+  # Contraction hierarchies make routing and matrix calls fast. Both profiles are prepared at import time.
+  profiles_ch:
+    - profile: car
+    - profile: fun
+  profiles_lm: []
+
+  # road_class feeds fun.json; the car_* values feed car.json.
+  graph.encoded_values: |
+    car_access, car_average_speed, country, road_class, roundabout, max_speed, road_environment, ferry_speed
+
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: 0.0.0.0
+      max_request_header_size: 50k
+  request_log:
+    appenders: []
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: 0.0.0.0
+
+logging:
+  appenders:
+    - type: console
+      threshold: INFO
+      target: STDOUT
