@@ -997,6 +997,59 @@ labelSelect.onchange = () => {
   renderMarkers();
 };
 
+// Sidebar width: drag the handle (or use arrow keys on it); double-click resets. Remembered per browser.
+const SIDEBAR_KEY = "route-camp.sidebar-width";
+const SIDEBAR_DEFAULT = 340;
+const SIDEBAR_MIN = 220;
+const MAP_MIN = 300; // the map always keeps at least this much width
+
+function setSidebarWidth(width: number, save = true): void {
+  const max = Math.max(SIDEBAR_MIN, window.innerWidth - MAP_MIN);
+  const clamped = Math.round(Math.min(max, Math.max(SIDEBAR_MIN, width)));
+  document.body.style.setProperty("--sidebar-width", `${clamped}px`);
+  map.resize();
+  if (!save) return;
+  try {
+    localStorage.setItem(SIDEBAR_KEY, String(clamped));
+  } catch {
+    // Not stored; the width still applies to this page view.
+  }
+}
+
+try {
+  const stored = Number(localStorage.getItem(SIDEBAR_KEY));
+  if (stored) setSidebarWidth(stored, false);
+} catch {
+  // Storage unavailable: keep the default width.
+}
+
+const resizer = $("sidebar-resizer");
+resizer.onpointerdown = (event: PointerEvent) => {
+  event.preventDefault();
+  resizer.setPointerCapture(event.pointerId);
+  resizer.classList.add("dragging");
+  document.body.classList.add("resizing");
+};
+resizer.onpointermove = (event: PointerEvent) => {
+  if (resizer.hasPointerCapture(event.pointerId)) setSidebarWidth(event.clientX, false);
+};
+const endResize = (event: PointerEvent) => {
+  if (!resizer.hasPointerCapture(event.pointerId)) return;
+  resizer.releasePointerCapture(event.pointerId);
+  resizer.classList.remove("dragging");
+  document.body.classList.remove("resizing");
+  setSidebarWidth($("sidebar").getBoundingClientRect().width);
+};
+resizer.onpointerup = endResize;
+resizer.onpointercancel = endResize;
+resizer.ondblclick = () => setSidebarWidth(SIDEBAR_DEFAULT);
+resizer.onkeydown = (event: KeyboardEvent) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  const width = $("sidebar").getBoundingClientRect().width;
+  setSidebarWidth(width + (event.key === "ArrowRight" ? 20 : -20));
+};
+
 // Each section header toggles its body; the state is remembered like the folders.
 for (const toggle of document.querySelectorAll<HTMLButtonElement>(".section-toggle")) {
   const section = toggle.dataset.section ?? "";

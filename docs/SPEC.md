@@ -211,6 +211,9 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
 
 - One page: a sidebar on the left (GPX, POIs, new route, routes, plans) and the map filling the rest.
   On narrow screens the sidebar stacks above the map.
+- The sidebar is resizable: drag the handle on its right edge (or focus it and use the arrow keys);
+  double-click resets to 340px. Width is clamped to 220px minimum and always leaves the map 300px, and
+  is remembered in `localStorage` under `route-camp.sidebar-width`. The handle is hidden on narrow screens.
 - State is minimal; the server is the source of truth and `refresh()` reloads everything after each
   change. DOM is built with a small `h()` helper that sets user text as text, never HTML.
 - **Folders are tags.** The POI and route lists are grouped by tag, client-side (`renderFolders()` in
