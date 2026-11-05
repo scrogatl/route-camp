@@ -8,8 +8,9 @@ from app.config import Settings
 from app.database import get_session
 from app.gpx import parse_gpx
 from app.models import Route
-from app.schemas import ImportedRouteOut, ImportSummaryOut
-from app.services import ImportSummary, export_route_gpx, import_gpx
+from app.rally import RallyCsvError, parse_rally_csv
+from app.schemas import ImportedRouteOut, ImportSummaryOut, RallyImportOut
+from app.services import ImportSummary, export_route_gpx, import_gpx, import_rally_bonuses
 
 router = APIRouter(tags=["gpx"])
 
@@ -25,6 +26,26 @@ async def import_gpx_file(file: UploadFile, session: Session = Depends(get_sessi
     summary = import_gpx(session, parsed)
     session.commit()
     return _summary_out(summary)
+
+
+@router.post("/rally/import", response_model=RallyImportOut, tags=["rally"])
+async def import_rally_csv(file: UploadFile, session: Session = Depends(get_session)):
+    """Rally bonus CSV (code, lat, lon, points, state). Matches existing POIs; reports created vs matched."""
+    data = await file.read()
+    try:
+        bonuses = parse_rally_csv(data.decode("utf-8-sig"))
+    except (UnicodeDecodeError, RallyCsvError) as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid rally CSV: {exc}") from exc
+    summary = import_rally_bonuses(session, bonuses)
+    session.commit()
+    return RallyImportOut(
+        bonuses=summary.bonuses,
+        pois_created=len(summary.created),
+        pois_matched=summary.matched,
+        pois_updated=len(summary.updated),
+        created=summary.created,
+        updated=summary.updated,
+    )
 
 
 def _summary_out(summary: ImportSummary) -> ImportSummaryOut:

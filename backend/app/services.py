@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.geo import haversine_m, path_length_m, simplify
 from app.gpx import GpxPoint, GpxTrack, ParsedGpx, build_route_gpx
+from app.rally import RallyBonus
 from app.models import POI, Base, Plan, PlanRoute, Route, RouteStop, Tag
 from app.scores import parse_score
 from app.shaping import shaping_points
@@ -81,6 +82,54 @@ def find_or_create_poi(session: Session, name: str, lat: float, lon: float, note
     session.add(poi)
     session.flush()
     return poi, True
+
+
+@dataclass
+class RallyImportSummary:
+    bonuses: int = 0
+    created: list[str] = field(default_factory=list)
+    matched: int = 0
+    updated: list[str] = field(default_factory=list)
+
+
+def _is_rally_name(name: str, code: str) -> bool:
+    """A POI is that bonus if it is named by the code alone ("ABAC") or the code and its points ("ABAC 510")."""
+    return name == code or name.startswith(code + " ")
+
+
+def import_rally_bonuses(session: Session, bonuses: list[RallyBonus]) -> RallyImportSummary:
+    """Matches each bonus to an existing POI by name (see _is_rally_name) and position within
+    COORD_TOLERANCE, as GPX import does, and sets its points and state; otherwise creates a POI
+    named by the code. Names, tags and notes of matched POIs are never changed."""
+    summary = RallyImportSummary(bonuses=len(bonuses))
+    seen: set[int] = set()
+    for bonus in bonuses:
+        candidates = session.scalars(select(POI).where(POI.name.startswith(bonus.code, autoescape=True)))
+        poi = next(
+            (
+                p
+                for p in candidates
+                if _is_rally_name(p.name, bonus.code)
+                and abs(p.lat - bonus.lat) < COORD_TOLERANCE
+                and abs(p.lon - bonus.lon) < COORD_TOLERANCE
+            ),
+            None,
+        )
+        if poi is None:
+            poi = POI(name=bonus.code, lat=bonus.lat, lon=bonus.lon, score=bonus.points, state=bonus.state)
+            session.add(poi)
+            session.flush()
+            summary.created.append(bonus.code)
+            seen.add(poi.id)
+            continue
+        if poi.id in seen:
+            continue  # the same bonus twice in one file
+        seen.add(poi.id)
+        summary.matched += 1
+        if poi.score != bonus.points or poi.state != bonus.state:
+            poi.score, poi.state = bonus.points, bonus.state
+            summary.updated.append(poi.name)
+    return summary
 
 
 def _coord_key(lat: float, lon: float) -> tuple[float, float]:

@@ -49,6 +49,7 @@ class POI(Base):
     lon: Mapped[float] = mapped_column(Float)
     notes: Mapped[str | None] = mapped_column(Text, default=None)
     score: Mapped[int | None] = mapped_column(Integer, default=None)
+    state: Mapped[str | None] = mapped_column(String(40), default=None)  # e.g. "GA", from a rally CSV
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

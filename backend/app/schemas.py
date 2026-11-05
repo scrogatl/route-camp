@@ -29,6 +29,7 @@ class POIIn(BaseModel):
     lon: float = Field(ge=-180, le=180)
     notes: str | None = None
     score: int | None = Score
+    state: str | None = Field(default=None, max_length=40)
     tags: list[str] = []
 
 
@@ -38,6 +39,7 @@ class POIUpdate(BaseModel):
     lon: float | None = Field(default=None, ge=-180, le=180)
     notes: str | None = None
     score: int | None = Score  # an explicit null clears the score
+    state: str | None = Field(default=None, max_length=40)
     tags: list[str] | None = None
 
 
@@ -48,6 +50,7 @@ class POIOut(BaseModel):
     lon: float
     notes: str | None
     score: int | None
+    state: str | None
     tags: list[str]
     created_at: datetime
     updated_at: datetime
@@ -173,6 +176,18 @@ class ImportSummaryOut(BaseModel):
     routes: list[ImportedRouteOut]
 
 
+# --- Rally CSV import --------------------------------------------------------
+
+
+class RallyImportOut(BaseModel):
+    bonuses: int  # rows in the file
+    pois_created: int
+    pois_matched: int
+    pois_updated: int  # matched POIs whose points or state changed
+    created: list[str]  # codes of the new POIs
+    updated: list[str]  # names of the changed POIs
+
+
 # --- ORM -> response --------------------------------------------------------
 
 
@@ -184,6 +199,7 @@ def poi_out(poi: POI) -> POIOut:
         lon=poi.lon,
         notes=poi.notes,
         score=poi.score,
+        state=poi.state,
         tags=[t.name for t in poi.tags],
         created_at=poi.created_at,
         updated_at=poi.updated_at,
