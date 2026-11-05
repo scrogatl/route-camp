@@ -26,6 +26,7 @@ def create_poi(payload: POIIn, session: Session = Depends(get_session)):
         lat=payload.lat,
         lon=payload.lon,
         notes=payload.notes,
+        score=payload.score,
         tags=get_or_create_tags(session, payload.tags),
     )
     session.add(poi)

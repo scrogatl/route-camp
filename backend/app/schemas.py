@@ -20,11 +20,15 @@ class TagOut(BaseModel):
 # --- POIs -------------------------------------------------------------------
 
 
+Score = Field(default=None, ge=0, le=999_999_999)
+
+
 class POIIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     notes: str | None = None
+    score: int | None = Score
     tags: list[str] = []
 
 
@@ -33,6 +37,7 @@ class POIUpdate(BaseModel):
     lat: float | None = Field(default=None, ge=-90, le=90)
     lon: float | None = Field(default=None, ge=-180, le=180)
     notes: str | None = None
+    score: int | None = Score  # an explicit null clears the score
     tags: list[str] | None = None
 
 
@@ -42,6 +47,7 @@ class POIOut(BaseModel):
     lat: float
     lon: float
     notes: str | None
+    score: int | None
     tags: list[str]
     created_at: datetime
     updated_at: datetime
@@ -162,6 +168,7 @@ def poi_out(poi: POI) -> POIOut:
         lat=poi.lat,
         lon=poi.lon,
         notes=poi.notes,
+        score=poi.score,
         tags=[t.name for t in poi.tags],
         created_at=poi.created_at,
         updated_at=poi.updated_at,

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.geo import haversine_m, path_length_m, simplify
 from app.gpx import GpxPoint, GpxTrack, ParsedGpx, build_route_gpx
 from app.models import POI, Base, Plan, PlanRoute, Route, RouteStop, Tag
+from app.scores import parse_score
 from app.shaping import shaping_points
 
 COORD_TOLERANCE = 1e-6  # ~10 cm; used to match GPX points to existing POIs
@@ -76,7 +77,7 @@ def find_or_create_poi(session: Session, name: str, lat: float, lon: float, note
     for poi in session.scalars(select(POI).where(POI.name == name)):
         if abs(poi.lat - lat) < COORD_TOLERANCE and abs(poi.lon - lon) < COORD_TOLERANCE:
             return poi, False
-    poi = POI(name=name, lat=lat, lon=lon, notes=notes)
+    poi = POI(name=name, lat=lat, lon=lon, notes=notes, score=parse_score(name))
     session.add(poi)
     session.flush()
     return poi, True
