@@ -1,8 +1,18 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { askConfirm, askText, hideUndo, showMessage, showUndo } from "./dialogs";
-import { api, type ImportSummary, type Plan, type POI, type Profile, type Route } from "./api";
+import { askConfirm, askDecision, askText, hideUndo, showMessage, showUndo } from "./dialogs";
+import {
+  api,
+  type ImportSummary,
+  type LonLat,
+  type OptimizePreview,
+  type OrderSummary,
+  type Plan,
+  type POI,
+  type Profile,
+  type Route,
+} from "./api";
 
 // Minimal app state. The server is the source of truth; refresh() reloads everything after each change.
 const state = {
@@ -11,6 +21,7 @@ const state = {
   plans: [] as Plan[],
   selected: [] as number[], // POI ids in the order they were ticked (= route order)
   shownRouteId: null as number | null,
+  shownPlanId: null as number | null,
 };
 
 const expandedRoutes = new Set<number>(); // routes whose stops are listed in the sidebar
@@ -64,6 +75,17 @@ function routeSummary(route: Route): string {
   const origin = route.geometry_source === "imported" ? "GPX track" : route.profile;
   const time = route.time_s == null ? "no time" : formatDuration(route.time_s);
   return `${route.name} (${origin}): ${formatKm(route.distance_m)}, ${time}`;
+}
+
+function orderTotals(order: OrderSummary): string {
+  if (order.distance_m == null) return "no distance (GraphHopper unavailable)";
+  const time = order.time_s == null ? "no time" : formatDuration(order.time_s);
+  return `${formatKm(order.distance_m)}, ${time}`;
+}
+
+// Replaces the route summary under the Routes section (text, or nodes for the plan legend).
+function setSummary(...content: (Node | string)[]): void {
+  $("route-summary").replaceChildren(...content);
 }
 
 function planTotals(plan: Plan): string {
@@ -158,6 +180,22 @@ map.on("style.load", () => {
     layout: { "line-join": "round", "line-cap": "round" },
     paint: { "line-color": "#d9480f", "line-width": 4 },
   });
+  map.addSource("preview", { type: "geojson", data: emptyLine });
+  map.addLayer({
+    id: "preview-line",
+    type: "line",
+    source: "preview",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#1971c2", "line-width": 4, "line-dasharray": [2, 2] },
+  });
+  map.addSource("plan", { type: "geojson", data: emptyLine });
+  map.addLayer({
+    id: "plan-lines",
+    type: "line",
+    source: "plan",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": 0.85 },
+  });
   if (pendingRoute) showRoute(pendingRoute);
 });
 
@@ -244,11 +282,22 @@ map.on("click", (event) =>
   }),
 );
 
+// Frames the map on a line. Does nothing for an empty line.
+function fitTo(points: LonLat[]): void {
+  if (points.length === 0) return;
+  const [first, ...rest] = points;
+  const bounds = rest.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(first, first));
+  map.fitBounds(bounds, { padding: 60 });
+}
+
 function showRoute(route: Route): void {
   state.shownRouteId = route.id;
-  const summary = $("route-summary");
-  summary.textContent = routeSummary(route);
+  state.shownPlanId = null;
+  setSummary(routeSummary(route));
+  renderRoutes();
+  renderPlans();
   renderMarkers();
+  map.getSource<maplibregl.GeoJSONSource>("plan")?.setData(emptyLine);
   const source = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
   if (!source) {
     pendingRoute = route; // drawn by the style.load handler
@@ -264,17 +313,64 @@ function showRoute(route: Route): void {
     properties: {},
     geometry: { type: "LineString", coordinates: route.geometry },
   });
-  const [first, ...rest] = route.geometry;
-  const bounds = rest.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(first, first));
-  map.fitBounds(bounds, { padding: 60 });
+  fitTo(route.geometry);
 }
 
+// Hides whatever is drawn (a route, its stop numbers or a plan). Nothing is deleted.
 function clearShownRoute(): void {
   state.shownRouteId = null;
+  state.shownPlanId = null;
   pendingRoute = null;
-  $("route-summary").textContent = "";
+  setSummary();
   map.getSource<maplibregl.GeoJSONSource>("route")?.setData(emptyLine);
+  map.getSource<maplibregl.GeoJSONSource>("plan")?.setData(emptyLine);
+  renderRoutes();
+  renderPlans();
   renderMarkers();
+}
+
+// Draws every calculated route of a plan together, each in its own colour, and fits the map to them.
+const PLAN_COLORS = ["#d9480f", "#1971c2", "#2b8a3e", "#9c36b5", "#e8590c", "#0c8599"];
+
+function showPlan(plan: Plan): void {
+  state.shownPlanId = plan.id;
+  state.shownRouteId = null;
+  pendingRoute = null;
+  map.getSource<maplibregl.GeoJSONSource>("route")?.setData(emptyLine);
+  const legs = plan.route_ids
+    .map((id, index) => ({ route: state.routes.find((r) => r.id === id), color: PLAN_COLORS[index % PLAN_COLORS.length] }))
+    .filter((leg): leg is { route: Route; color: string } => leg.route !== undefined);
+  const drawn = legs.filter(({ route }) => route.geometry && route.geometry.length > 1);
+  map.getSource<maplibregl.GeoJSONSource>("plan")?.setData({
+    type: "FeatureCollection",
+    features: drawn.map(({ route, color }) => ({
+      type: "Feature" as const,
+      properties: { color },
+      geometry: { type: "LineString" as const, coordinates: route.geometry as LonLat[] },
+    })),
+  });
+  setSummary(
+    h("div", {}, `${plan.name}: ${planTotals(plan)}`),
+    ...legs.map(({ route, color }, index) =>
+      h("div", {}, h("span", { className: "swatch", style: `background:${color}` }), ` ${index + 1}. ${route.name}${route.geometry ? "" : " (not calculated)"}`),
+    ),
+  );
+  renderRoutes();
+  renderPlans();
+  renderMarkers();
+  fitTo(drawn.flatMap(({ route }) => route.geometry as LonLat[]));
+}
+
+// The dashed line shown while an optimize proposal is being reviewed.
+function drawPreview(geometry: LonLat[] | null): void {
+  const source = map.getSource<maplibregl.GeoJSONSource>("preview");
+  if (!source) return;
+  if (!geometry || geometry.length < 2) {
+    source.setData(emptyLine);
+    return;
+  }
+  source.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: geometry } });
+  fitTo(geometry);
 }
 
 // --- Folders ----------------------------------------------------------------
@@ -422,7 +518,12 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
         await refresh();
       }),
   }, "tag all");
-  if (!tag) return [selectAll, tagAll];
+  const routeAction = h("button", {
+    className: "folder-action",
+    title: `Make a route from ${ticked(ids) ? "the ticked POIs in" : "all"} this folder`,
+    onclick: () => run(() => routeFromFolder(tag, pois)),
+  }, "route");
+  if (!tag) return [selectAll, routeAction, tagAll];
   const untagAll = h("button", {
     className: "folder-action",
     title: `Remove the "${tag}" tag from all ${pois.length} POIs`,
@@ -438,7 +539,34 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
         showUndo(`Removed "${tag}" from ${ids.length} POIs.`, () => run(() => retagPois(tag, ids)));
       }),
   }, "untag all");
-  return [selectAll, tagAll, untagAll];
+  return [selectAll, routeAction, tagAll, untagAll];
+}
+
+function ticked(ids: number[]): boolean {
+  return ids.some((id) => state.selected.includes(id));
+}
+
+// A route from a folder: its ticked POIs in tick order if any are ticked, otherwise every POI in it.
+// Then the optimize review opens straight away, so the order can be checked.
+async function routeFromFolder(tag: string, pois: POI[]): Promise<void> {
+  const inFolder = new Set(pois.map((poi) => poi.id));
+  const tickedIds = state.selected.filter((id) => inFolder.has(id));
+  const poiIds = tickedIds.length ? tickedIds : pois.map((poi) => poi.id);
+  if (poiIds.length < 2) {
+    notify("A route needs at least two POIs. Tick two, or put more POIs in this folder.");
+    return;
+  }
+  const name = (await askText("Route name?", tag || "Untagged route"))?.trim();
+  if (!name) return;
+  const profile = (await askText("Profile: car or fun?", "car"))?.trim();
+  if (profile !== "car" && profile !== "fun") {
+    notify('The profile must be "car" or "fun".');
+    return;
+  }
+  const route = await api.createRoute({ name, profile, poi_ids: poiIds });
+  state.selected = [];
+  await refresh();
+  await optimize(route);
 }
 
 // Puts a tag back on exactly these POIs (those still in the library), recreating the tag if it was deleted.
@@ -466,17 +594,57 @@ async function calculate(route: Route): Promise<void> {
 
 async function optimize(route: Route): Promise<void> {
   if (!(await confirmReplaceImported(route, "Optimizing"))) return;
-  const { source } = await api.optimizeRoute(route.id, route.geometry_source === "imported");
-  await refresh();
-  notify(
-    source === "none"
-      ? "Need at least three stops to reorder."
-      : `Stops reordered using ${source} travel times. Calculate the route again to refresh the line.`,
-  );
+  const preview = await api.previewOptimize(route.id, route.geometry_source === "imported");
+  if (preview.source === "none") {
+    notify("Need at least three stops to reorder.");
+    return;
+  }
+  if (preview.proposed.poi_ids.join() === preview.current.poi_ids.join()) {
+    notify(`"${route.name}" is already in the best order.`);
+    return;
+  }
+  await reviewOrder(route, preview);
 }
 
-// The stops of a route, in order. Clicking one flies the map to it.
+// Nothing is saved until Accept. Accepting stores the proposed order and calculates the line again.
+async function reviewOrder(route: Route, preview: OptimizePreview): Promise<void> {
+  drawPreview(preview.geometry);
+  const message = [
+    `Current order: ${orderTotals(preview.current)}.`,
+    `Proposed order: ${orderTotals(preview.proposed)}.`,
+    preview.geometry
+      ? "The dashed blue line is the proposed route."
+      : "GraphHopper gave no line for the proposed order.",
+    "Accept saves the new order and calculates the line. Reject changes nothing.",
+  ].join("\n");
+  let accepted: boolean;
+  try {
+    accepted = await askDecision(message, "Accept", "Reject");
+  } finally {
+    drawPreview(null);
+  }
+  if (!accepted) return;
+  await api.updateRoute(route.id, { poi_ids: preview.proposed.poi_ids });
+  const updated = await api.calculateRoute(route.id, false);
+  await refresh();
+  showRoute(updated);
+}
+
+// Replaces a route's stops (after a move or a removal). Changing stops clears the cached line.
+async function setStops(route: Route, poiIds: number[]): Promise<void> {
+  const updated = await api.updateRoute(route.id, { poi_ids: poiIds });
+  await refresh();
+  if (state.shownRouteId === route.id) showRoute(updated);
+}
+
+// The stops of a route, in order. Clicking a name flies the map to it.
 function renderStops(route: Route): HTMLElement {
+  const last = route.poi_ids.length - 1;
+  const move = (index: number, step: number) => {
+    const ids = [...route.poi_ids];
+    [ids[index], ids[index + step]] = [ids[index + step], ids[index]];
+    return setStops(route, ids);
+  };
   return h(
     "ol",
     { className: "route-stops" },
@@ -493,13 +661,40 @@ function renderStops(route: Route): HTMLElement {
               onclick: () => map.flyTo({ center: [poi.lon, poi.lat], zoom: 12 }),
             }, poi.name)
           : h("span", { className: "name meta" }, "(deleted POI)"),
+        h("button", { title: "Move stop up", disabled: index === 0, onclick: () => run(() => move(index, -1)) }, "↑"),
+        h("button", { title: "Move stop down", disabled: index === last, onclick: () => run(() => move(index, 1)) }, "↓"),
+        h("button", {
+          title: "Remove this stop from the route",
+          onclick: () => run(() => setStops(route, route.poi_ids.filter((_, i) => i !== index))),
+        }, "remove"),
       );
     }),
   );
 }
 
+// A route can be added to a plan from its own row, as well as from the plan.
+function planPicker(route: Route): HTMLElement {
+  const available = state.plans.filter((plan) => !plan.route_ids.includes(route.id));
+  const select: HTMLSelectElement = h(
+    "select",
+    {
+      className: "plan-picker",
+      title: "Add this route to a plan",
+      onchange: () => {
+        const plan = state.plans.find((p) => p.id === Number(select.value));
+        select.value = "";
+        if (plan) void setPlanRoutes(plan, [...plan.route_ids, route.id]);
+      },
+    },
+    h("option", { value: "" }, !state.plans.length ? "no plans yet" : available.length ? "add to plan…" : "in every plan"),
+    ...available.map((plan) => h("option", { value: String(plan.id) }, plan.name)),
+  );
+  return select;
+}
+
 function renderRouteItem(route: Route): HTMLElement {
   const expanded = expandedRoutes.has(route.id);
+  const shown = state.shownRouteId === route.id;
   const toggleStops = () => {
     if (expanded) expandedRoutes.delete(route.id);
     else expandedRoutes.add(route.id);
@@ -507,7 +702,7 @@ function renderRouteItem(route: Route): HTMLElement {
   };
   return h(
     "li",
-    { className: "route" },
+    { className: shown ? "route shown" : "route" },
     h(
       "div",
       { className: "route-head" },
@@ -519,24 +714,33 @@ function renderRouteItem(route: Route): HTMLElement {
       }),
       h(
         "span",
-        { className: "name", title: route.name, onclick: () => showRoute(route) },
+        {
+          className: "name",
+          title: `Show ${route.name} on the map`,
+          onclick: () => showRoute(route),
+        },
         `${route.name} (${route.geometry_source === "imported" ? "track" : route.profile})`,
       ),
     ),
     h(
       "div",
       { className: "route-actions" },
+      h("button", {
+        className: "show-route",
+        title: shown ? "Hide this route and its stop numbers" : "Draw this route on the map",
+        onclick: () => (shown ? clearShownRoute() : showRoute(route)),
+      }, shown ? "hide" : "show"),
       h(
         "span",
         { className: "meta" },
-        route.distance_m == null ? `${route.poi_ids.length} stops` : formatKm(route.distance_m),
+        route.distance_m == null ? `${route.poi_ids.length} stops, not calculated` : formatKm(route.distance_m),
       ),
       h("button", {
         title: "Calculate with GraphHopper",
         onclick: () => run(() => calculate(route)),
       }, "calc"),
       h("button", {
-        title: "Reorder stops for shortest time",
+        title: "Review a shorter stop order before saving it",
         onclick: () => run(() => optimize(route)),
       }, "optimize"),
       h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
@@ -550,6 +754,7 @@ function renderRouteItem(route: Route): HTMLElement {
             await refresh();
           }),
       }, "tags"),
+      planPicker(route),
       h("button", {
         title: "Delete route",
         onclick: () =>
@@ -561,7 +766,12 @@ function renderRouteItem(route: Route): HTMLElement {
           }),
       }, "delete"),
     ),
-    ...(expanded ? [renderStops(route)] : []),
+    ...(expanded
+      ? [
+          renderStops(route),
+          h("p", { className: "hint stops-hint" }, "Changing stops clears the line. Press calc to draw it again."),
+        ]
+      : []),
   );
 }
 
@@ -598,15 +808,32 @@ function addRouteRow(plan: Plan): HTMLElement {
 }
 
 function renderPlans(): void {
-  $("plan-list").replaceChildren(
-    ...state.plans.map((plan) =>
+  const list = $("plan-list");
+  if (state.plans.length === 0) {
+    list.replaceChildren(
       h(
         "li",
-        { className: "plan" },
+        { className: "hint empty-plans" },
+        'No plans yet. A plan is one trip made of routes in order. For example, create "Georgia loop", then add "Day 1 north" and "Day 2 south" to it.',
+      ),
+    );
+    return;
+  }
+  list.replaceChildren(
+    ...state.plans.map((plan) => {
+      const shown = state.shownPlanId === plan.id;
+      return h(
+        "li",
+        { className: shown ? "plan shown" : "plan" },
         h(
           "div",
           { className: "plan-head" },
           h("span", { className: "name", title: plan.name }, plan.name),
+          h("button", {
+            className: "show-route",
+            title: shown ? "Hide this plan's routes" : "Draw all of this plan's routes on the map together",
+            onclick: () => (shown ? clearShownRoute() : showPlan(plan)),
+          }, shown ? "hide" : "show"),
           h("button", {
             title: "Rename plan",
             onclick: () =>
@@ -633,6 +860,7 @@ function renderPlans(): void {
               run(async () => {
                 if (!(await askConfirm(`Delete plan "${plan.name}"? Its routes are kept.`, "Delete"))) return;
                 await api.deletePlan(plan.id);
+                if (state.shownPlanId === plan.id) clearShownRoute();
                 await refresh();
               }),
           }, "delete"),
@@ -669,8 +897,8 @@ function renderPlans(): void {
           }),
         ),
         addRouteRow(plan),
-      ),
-    ),
+      );
+    }),
   );
 }
 

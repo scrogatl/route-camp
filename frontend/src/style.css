@@ -209,3 +209,16 @@ button.folder-action { font-size: 11px; padding: 0 6px; margin: 0; }
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
 }
 #undo-bar button { margin: 0; }
+
+/* Route rows: the shown route is highlighted; its name is an obvious link. */
+li.route { border-left: 3px solid transparent; padding-left: 4px; }
+li.route.shown { border-left-color: var(--accent); background: rgb(217 72 15 / 0.12); }
+.route-head .name:hover { text-decoration: underline; }
+button.show-route { font-weight: 600; border: 1px solid var(--accent); border-radius: 4px; }
+.stops-hint { margin: 0 0 4px 22px; }
+.plan-picker { width: auto; max-width: 150px; margin: 0; font-size: 12px; }
+
+/* Plans: the shown plan is highlighted; the hint before any plan explains what one is. */
+li.plan.shown { border-left: 3px solid var(--accent); padding-left: 4px; }
+li.empty-plans { border: 0; padding: 4px 0; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }

@@ -38,6 +38,20 @@ export interface Plan {
   routes_with_time: number;
 }
 
+export interface OrderSummary {
+  poi_ids: number[];
+  distance_m: number | null;
+  time_s: number | null;
+}
+
+// A proposed stop order from the optimize preview. Nothing is saved until the user accepts it.
+export interface OptimizePreview {
+  source: "graphhopper" | "haversine" | "none";
+  current: OrderSummary;
+  proposed: OrderSummary;
+  geometry: LonLat[] | null;
+}
+
 export interface Tag {
   id: number;
   name: string;
@@ -100,10 +114,13 @@ export const api = {
   listRoutes: () => request<Route[]>("/routes"),
   createRoute: (route: { name: string; profile: Profile; poi_ids: number[] }) =>
     request<Route>("/routes", send("POST", route)),
-  updateRoute: (id: number, patch: Partial<Pick<Route, "tags">>) => request<Route>(`/routes/${id}`, send("PATCH", patch)),
+  updateRoute: (id: number, patch: Partial<Pick<Route, "tags" | "poi_ids">>) =>
+    request<Route>(`/routes/${id}`, send("PATCH", patch)),
   deleteRoute: (id: number) => request<void>(`/routes/${id}`, send("DELETE")),
   calculateRoute: (id: number, replaceImported: boolean) =>
     request<Route>(`/routes/${id}/calculate?replace_imported=${replaceImported}`, send("POST")),
+  previewOptimize: (id: number, replaceImported: boolean) =>
+    request<OptimizePreview>(`/routes/${id}/optimize-preview?replace_imported=${replaceImported}`, send("POST")),
   optimizeRoute: (id: number, replaceImported: boolean) =>
     request<{ route: Route; source: string }>(`/routes/${id}/optimize?replace_imported=${replaceImported}`, send("POST")),
   routeGpxUrl: (id: number) => `/api/routes/${id}/gpx`,

@@ -14,7 +14,10 @@ function getDialog(): HTMLDialogElement {
 
 // Shows a message with optional text input. Resolves with the input value (or "" without one)
 // on OK, or null on Cancel / Escape.
-function open(message: string, opts: { input?: string; cancel?: boolean; ok?: string }): Promise<string | null> {
+function open(
+  message: string,
+  opts: { input?: string; cancel?: boolean; ok?: string; cancelLabel?: string },
+): Promise<string | null> {
   const box = getDialog();
   const text = document.createElement("p");
   text.textContent = message;
@@ -25,7 +28,7 @@ function open(message: string, opts: { input?: string; cancel?: boolean; ok?: st
   ok.textContent = opts.ok ?? "OK";
   const cancel = document.createElement("button");
   cancel.type = "button";
-  cancel.textContent = "Cancel";
+  cancel.textContent = opts.cancelLabel ?? "Cancel";
   const buttons = document.createElement("div");
   buttons.className = "dialog-buttons";
   buttons.append(...(opts.cancel ? [cancel, ok] : [ok]));
@@ -55,6 +58,11 @@ export function showMessage(message: string): Promise<void> {
 
 export async function askConfirm(message: string, ok = "OK"): Promise<boolean> {
   return (await open(message, { cancel: true, ok })) !== null;
+}
+
+// Two-way choice such as Accept / Reject. True for the first button, false for the second or Escape.
+export async function askDecision(message: string, accept: string, reject: string): Promise<boolean> {
+  return (await open(message, { cancel: true, ok: accept, cancelLabel: reject })) !== null;
 }
 
 export function askText(message: string, initial = ""): Promise<string | null> {
