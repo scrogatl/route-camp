@@ -146,8 +146,8 @@ start). OR-Tools or VROOM is the planned upgrade when time windows, a return leg
 One file per route: `wpt` for each unique POI, one `rte` with the stops in order, and a `trk` with the
 cached line when there is one. Creator is `route-camp`. **Verified on a Garmin zūmo 396:** the file
 imports as a trip and matches the planned line. On a real ride (November 2026, route "Walmart-Nav-Test")
-the device recalculated the route while navigating, and the user judged that acceptable. Adding shaping
-points to hold the exact line is therefore not needed for now.
+the device recalculated the route while navigating. That was acceptable, but exporting extra shaping
+points along the line, so the device holds the planned roads, stays on the roadmap (section 9).
 
 ## 5. GraphHopper setup
 
@@ -232,6 +232,8 @@ done by hand in a browser.
 
 ## 9. Known gaps and next steps
 
+- Garmin shaping points: export extra shaping points along the calculated line (not just the POI
+  stops) so the device's recalculation stays on the planned roads, especially "fun" back roads.
 - The "fun" profile only re-weights road classes. A curvature-based model would be closer to Kurviger.
 - Route names get cut off in the sidebar because the row's buttons take most of the width.
 - No login, single user. Before hosting publicly: add auth, move to Postgres, add Alembic, and pick a
