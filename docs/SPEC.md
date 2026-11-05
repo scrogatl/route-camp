@@ -224,6 +224,12 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
 - **Select / unselect:** each POI folder header has a "select" button that ticks every POI in the folder
   (appended after the current tick order, in the folder's displayed order). Once all of them are
   ticked it reads "unselect" and unticks them. Works while the folder is collapsed.
+- **Delete POIs in a folder:** each POI folder header has "delete", labelled "delete N selected" when
+  some of the folder's POIs are ticked (only those are deleted), otherwise "delete all N". It is permanent
+  and has no undo (a recreated POI would get a new id and lose its route stops), so the confirm does the
+  work: it names the folder and count, says how many routes lose stops (names up to three), and says when
+  a POI also has other tags, since it is deleted everywhere. The confirm's button is "Delete". The POIs are
+  deleted one request at a time, then the selection drops them and the list reloads (`deleteFolderPois()`).
 - **Undo after untag all:** a successful "untag all" shows a bar at the bottom of the page (not a
   modal): `Removed "<tag>" from N POIs.` with **Undo**. Undo re-tags exactly those POI ids, recreating
   the tag by name if it was deleted. The bar goes away after 10 s, on its × button, or when the next

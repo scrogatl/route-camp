@@ -526,7 +526,8 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
     title: `Make a route from ${ticked(ids) ? "the ticked POIs in" : "all"} this folder`,
     onclick: () => run(() => routeFromFolder(tag, pois)),
   }, "route");
-  if (!tag) return [selectAll, routeAction, tagAll];
+  const deleteAction = folderDeleteButton(tag, pois);
+  if (!tag) return [selectAll, routeAction, tagAll, deleteAction];
   const untagAll = h("button", {
     className: "folder-action",
     title: `Remove the "${tag}" tag from all ${pois.length} POIs`,
@@ -542,7 +543,60 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
         showUndo(`Removed "${tag}" from ${ids.length} POIs.`, () => run(() => retagPois(tag, ids)));
       }),
   }, "untag all");
-  return [selectAll, routeAction, tagAll, untagAll];
+  return [selectAll, routeAction, tagAll, untagAll, deleteAction];
+}
+
+// Deletes the folder's ticked POIs if any are ticked, otherwise every POI in the folder. The label says which.
+function folderDeleteButton(tag: string, pois: POI[]): HTMLElement {
+  const ids = pois.map((poi) => poi.id);
+  const tickedCount = ids.filter((id) => state.selected.includes(id)).length;
+  const scope = tickedCount ? `${tickedCount} selected` : `all ${pois.length}`;
+  return h("button", {
+    className: "folder-action danger",
+    title: tickedCount
+      ? `Delete the ${tickedCount} ticked POIs in this folder (permanent)`
+      : `Delete all ${pois.length} POIs in this folder (permanent)`,
+    onclick: () => run(() => deleteFolderPois(tag, pois)),
+  }, `delete ${scope}`);
+}
+
+// Permanent, and not undoable: a recreated POI would get a new id and its route stops would be gone. So the
+// confirm spells out what goes: the count, the routes that lose stops, and POIs that also sit in other folders.
+async function deleteFolderPois(tag: string, pois: POI[]): Promise<void> {
+  const inFolder = new Set(pois.map((poi) => poi.id));
+  const tickedIds = state.selected.filter((id) => inFolder.has(id));
+  const targets = tickedIds.length ? pois.filter((poi) => tickedIds.includes(poi.id)) : pois;
+  const targetIds = new Set(targets.map((poi) => poi.id));
+  const folder = tag || UNTAGGED;
+  const scope = tickedIds.length
+    ? `the ${targets.length} ticked POI${targets.length === 1 ? "" : "s"} in "${folder}"`
+    : `all ${targets.length} POI${targets.length === 1 ? "" : "s"} in "${folder}"`;
+
+  const hitRoutes = state.routes.filter((route) => route.poi_ids.some((id) => targetIds.has(id)));
+  const shownNames = hitRoutes.slice(0, 3).map((route) => `"${route.name}"`);
+  const more = hitRoutes.length > shownNames.length ? ` and ${hitRoutes.length - shownNames.length} more` : "";
+  const otherTags = targets.filter((poi) => poi.tags.some((t) => t !== tag)).length;
+
+  const lines = [`Permanently delete ${scope}? This cannot be undone.`];
+  if (hitRoutes.length) {
+    lines.push(
+      `${hitRoutes.length} route${hitRoutes.length === 1 ? "" : "s"} will lose stops: ${shownNames.join(", ")}${more}.`,
+    );
+  }
+  if (otherTags) {
+    lines.push(
+      `${otherTags} of them also have other tags. They are deleted everywhere, not only from "${folder}".`,
+    );
+  }
+  if (!(await askConfirm(lines.join("\n\n"), "Delete"))) return;
+
+  try {
+    await forEachPoi(targets, (poi) => api.deletePoi(poi.id));
+  } finally {
+    // Even if a delete fails part way, the rows that did go leave the selection and the list is reloaded.
+    state.selected = state.selected.filter((id) => !targetIds.has(id));
+    await refresh();
+  }
 }
 
 function ticked(ids: number[]): boolean {
