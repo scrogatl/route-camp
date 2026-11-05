@@ -75,6 +75,7 @@ class RouteOut(BaseModel):
     distance_m: float | None
     time_s: float | None
     geometry: list[list[float]] | None
+    geometry_source: Literal["calculated", "imported"] | None
     tags: list[str]
     created_at: datetime
     updated_at: datetime
@@ -108,6 +109,12 @@ class PlanOut(BaseModel):
     notes: str | None
     route_ids: list[int]
     tags: list[str]
+    # Totals over the plan's routes. Routes without a calculated or imported line are left out of the sums.
+    distance_m: float
+    time_s: float
+    routes_total: int
+    routes_with_distance: int
+    routes_with_time: int
     created_at: datetime
     updated_at: datetime
 
@@ -130,11 +137,19 @@ class TaggedItemsOut(BaseModel):
     plans: list[PlanOut]
 
 
+class ImportedRouteOut(BaseModel):
+    id: int
+    name: str
+    kind: Literal["route", "track"]
+    status: Literal["created", "matched"]
+
+
 class ImportSummaryOut(BaseModel):
     pois_created: int
     pois_matched: int
     routes_created: int
-    tracks_skipped: int
+    routes_matched: int
+    routes: list[ImportedRouteOut]
 
 
 # --- ORM -> response --------------------------------------------------------
@@ -163,6 +178,7 @@ def route_out(route: Route) -> RouteOut:
         distance_m=route.distance_m,
         time_s=route.time_s,
         geometry=route.geometry,
+        geometry_source=route.geometry_source,
         tags=[t.name for t in route.tags],
         created_at=route.created_at,
         updated_at=route.updated_at,
@@ -170,12 +186,20 @@ def route_out(route: Route) -> RouteOut:
 
 
 def plan_out(plan: Plan) -> PlanOut:
+    routes = [link.route for link in plan.route_links]
+    distances = [r.distance_m for r in routes if r.distance_m is not None]
+    times = [r.time_s for r in routes if r.time_s is not None]
     return PlanOut(
         id=plan.id,
         name=plan.name,
         notes=plan.notes,
-        route_ids=[link.route.id for link in plan.route_links],
+        route_ids=[r.id for r in routes],
         tags=[t.name for t in plan.tags],
+        distance_m=sum(distances),
+        time_s=sum(times),
+        routes_total=len(routes),
+        routes_with_distance=len(distances),
+        routes_with_time=len(times),
         created_at=plan.created_at,
         updated_at=plan.updated_at,
     )

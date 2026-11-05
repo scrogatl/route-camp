@@ -56,7 +56,8 @@ def test_gpx_import_and_export_over_http(client):
         "</rte></gpx>"
     )
     summary = client.post("/api/gpx/import", files={"file": ("trip.gpx", gpx, "application/gpx+xml")}).json()
-    assert summary == {"pois_created": 2, "pois_matched": 0, "routes_created": 1, "tracks_skipped": 0}
+    assert summary["pois_created"] == 2 and summary["pois_matched"] == 0
+    assert summary["routes_created"] == 1 and summary["routes_matched"] == 0
 
     route = client.get("/api/routes").json()[0]
     exported = client.get(f"/api/routes/{route['id']}/gpx")

@@ -70,14 +70,25 @@ def delete_route(route_id: int, session: Session = Depends(get_session)):
     return Response(status_code=204)
 
 
+def _refuse_if_imported(route: Route, replace_imported: bool) -> None:
+    """An imported GPX track is only replaced when the caller asks for it explicitly."""
+    if route.geometry_source == "imported" and not replace_imported:
+        raise HTTPException(
+            status_code=409,
+            detail="This route has an imported GPX track. Pass replace_imported=true to replace it.",
+        )
+
+
 @router.post("/{route_id}/calculate", response_model=RouteOut)
 def calculate_route(
     route_id: int,
+    replace_imported: bool = False,
     session: Session = Depends(get_session),
     graphhopper: GraphHopperClient = Depends(get_graphhopper),
 ):
     """Ask GraphHopper for the line through the route's POIs (in order) and cache geometry, distance and time."""
     route = get_or_404(session, Route, route_id)
+    _refuse_if_imported(route, replace_imported)
     points = [[stop.poi.lon, stop.poi.lat] for stop in route.stops]
     if len(points) < 2:
         raise HTTPException(status_code=422, detail="A route needs at least two POIs to calculate")
@@ -86,6 +97,7 @@ def calculate_route(
     except RoutingError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     route.geometry = result.geometry
+    route.geometry_source = "calculated"
     route.distance_m = result.distance_m
     route.time_s = result.time_s
     route.calculated_at = utcnow()
@@ -96,11 +108,13 @@ def calculate_route(
 @router.post("/{route_id}/optimize", response_model=OptimizeOut)
 def optimize_route(
     route_id: int,
+    replace_imported: bool = False,
     session: Session = Depends(get_session),
     graphhopper: GraphHopperClient = Depends(get_graphhopper),
 ):
     """Reorder the stops for the shortest travel time. The first stop stays as the start."""
     route = get_or_404(session, Route, route_id)
+    _refuse_if_imported(route, replace_imported)
     stops: list[RouteStop] = list(route.stops)
     if len(stops) < 3:
         return OptimizeOut(route=route_out(route), source="none")

@@ -1,5 +1,4 @@
 import re
-from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
@@ -8,8 +7,8 @@ from app.api.deps import get_or_404
 from app.database import get_session
 from app.gpx import parse_gpx
 from app.models import Route
-from app.schemas import ImportSummaryOut
-from app.services import export_route_gpx, import_gpx
+from app.schemas import ImportedRouteOut, ImportSummaryOut
+from app.services import ImportSummary, export_route_gpx, import_gpx
 
 router = APIRouter(tags=["gpx"])
 
@@ -24,7 +23,17 @@ async def import_gpx_file(file: UploadFile, session: Session = Depends(get_sessi
         raise HTTPException(status_code=422, detail=f"Invalid GPX: {exc}") from exc
     summary = import_gpx(session, parsed)
     session.commit()
-    return ImportSummaryOut(**asdict(summary))
+    return _summary_out(summary)
+
+
+def _summary_out(summary: ImportSummary) -> ImportSummaryOut:
+    return ImportSummaryOut(
+        pois_created=summary.pois_created,
+        pois_matched=summary.pois_matched,
+        routes_created=sum(r.status == "created" for r in summary.routes),
+        routes_matched=sum(r.status == "matched" for r in summary.routes),
+        routes=[ImportedRouteOut(**vars(r)) for r in summary.routes],
+    )
 
 
 @router.get("/routes/{route_id}/gpx")

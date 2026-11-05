@@ -32,9 +32,10 @@ def test_export_then_import_round_trips_pois_and_route_order(db_session):
         fresh.commit()
 
         assert summary.pois_created == 3
-        assert summary.tracks_skipped == 1
+        assert [r.kind for r in summary.routes] == ["route"]  # the trk attached to the rte, no second route
         imported = fresh.scalars(select(Route)).one()
         assert imported.name == "Mountain loop"
+        assert imported.geometry_source == "imported" and imported.geometry
         assert [s.poi.name for s in imported.stops] == ["Trailhead", "Overlook", "Diner", "Overlook"]
         assert [s.poi.lat for s in imported.stops][:2] == [34.5, 34.6]
         assert fresh.scalars(select(POI).where(POI.name == "Trailhead")).one().notes == "parking"
@@ -48,6 +49,8 @@ def test_importing_twice_reuses_existing_pois(db_session):
     db_session.commit()
     assert summary.pois_created == 0
     assert summary.pois_matched == 3
+    assert [r.status for r in summary.routes] == ["matched"]
+    assert len(db_session.scalars(select(Route)).all()) == 1
     assert len(db_session.scalars(select(POI)).all()) == 3
 
 

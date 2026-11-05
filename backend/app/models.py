@@ -61,10 +61,13 @@ class Route(Base):
     name: Mapped[str] = mapped_column(String(200))
     notes: Mapped[str | None] = mapped_column(Text, default=None)
     profile: Mapped[str] = mapped_column(String(20), default="car")
-    # Cached GraphHopper result, cleared whenever the stops or profile change.
+    # Cached line, cleared whenever the stops or profile change.
+    # geometry_source is "calculated" (GraphHopper) or "imported" (a GPX track). Calculating over an imported
+    # track needs an explicit replace_imported flag, so a GPX track is never lost by accident.
     distance_m: Mapped[float | None] = mapped_column(Float, default=None)
     time_s: Mapped[float | None] = mapped_column(Float, default=None)
     geometry: Mapped[list | None] = mapped_column(JSON, default=None)  # [[lon, lat], ...]
+    geometry_source: Mapped[str | None] = mapped_column(String(20), default=None)
     calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -81,6 +84,7 @@ class Route(Base):
         self.distance_m = None
         self.time_s = None
         self.geometry = None
+        self.geometry_source = None
         self.calculated_at = None
 
 

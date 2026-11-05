@@ -6,16 +6,9 @@ TODO: swap for OR-Tools or VROOM when we need time windows, multiple vehicles or
 
 import math
 
-EARTH_RADIUS_M = 6_371_000.0
-FALLBACK_SPEED_MPS = 13.9  # ~50 km/h, used only when GraphHopper's matrix endpoint is unavailable
+from app.geo import haversine_m
 
-
-def haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
-    """Great-circle distance in metres between (lat, lon) pairs."""
-    lat1, lon1 = map(math.radians, a)
-    lat2, lon2 = map(math.radians, b)
-    h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
-    return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(h))
+FALLBACK_SPEED_MPS = 13.9  # ~50 km/h, used only when GraphHopper is unavailable
 
 
 def haversine_time_matrix(points: list[tuple[float, float]]) -> list[list[float]]:

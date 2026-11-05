@@ -21,10 +21,16 @@ class GpxRoute:
 
 
 @dataclass
+class GpxTrack:
+    name: str | None
+    points: list[tuple[float, float]]  # (lat, lon); all segments of the track, in order
+
+
+@dataclass
 class ParsedGpx:
     waypoints: list[GpxPoint] = field(default_factory=list)
     routes: list[GpxRoute] = field(default_factory=list)
-    tracks: list[list[tuple[float, float]]] = field(default_factory=list)  # (lat, lon) per track
+    tracks: list[GpxTrack] = field(default_factory=list)
 
 
 def parse_gpx(data: str | bytes) -> ParsedGpx:
@@ -38,7 +44,8 @@ def parse_gpx(data: str | bytes) -> ParsedGpx:
             for r in gpx.routes
         ],
         tracks=[
-            [(p.latitude, p.longitude) for segment in t.segments for p in segment.points] for t in gpx.tracks
+            GpxTrack(t.name, [(p.latitude, p.longitude) for segment in t.segments for p in segment.points])
+            for t in gpx.tracks
         ],
     )
 
