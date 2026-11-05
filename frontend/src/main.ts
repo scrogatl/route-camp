@@ -2,7 +2,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 import { askConfirm, askText, showMessage } from "./dialogs";
-import { api, type ImportSummary, type Plan, type POI, type Profile, type Route, type Tag } from "./api";
+import { api, type ImportSummary, type Plan, type POI, type Profile, type Route } from "./api";
 
 // Minimal app state. The server is the source of truth; refresh() reloads everything after each change.
 const state = {
@@ -12,6 +12,8 @@ const state = {
   selected: [] as number[], // POI ids in the order they were ticked (= route order)
   shownRouteId: null as number | null,
 };
+
+const expandedRoutes = new Set<number>(); // routes whose stops are listed in the sidebar
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -27,6 +29,8 @@ function h<K extends keyof HTMLElementTagNameMap>(
   for (const [key, value] of Object.entries(props)) {
     if (key.startsWith("on") && typeof value === "function") {
       node.addEventListener(key.slice(2), value as EventListener);
+    } else if (key.startsWith("aria-")) {
+      node.setAttribute(key, String(value));
     } else {
       Reflect.set(node, key, value);
     }
@@ -94,7 +98,41 @@ async function confirmReplaceImported(route: Route, action: string): Promise<boo
   return askConfirm(`"${route.name}" has an imported GPX track. ${action} replaces that track. Continue?`);
 }
 
+// Asks for comma-separated tags; null when cancelled.
+async function askTags(current: string[]): Promise<string[] | null> {
+  const input = await askText("Tags, comma separated?", current.join(", "));
+  if (input === null) return null;
+  return input.split(",").map((t) => t.trim()).filter(Boolean);
+}
+
 const emptyLine = { type: "FeatureCollection", features: [] } as { type: "FeatureCollection"; features: never[] };
+
+// --- Collapsed state --------------------------------------------------------
+
+// Collapsed sections and folders are remembered per browser. Storage can be unavailable (private
+// window, blocked site data), in which case the state simply lasts for this page view.
+const COLLAPSED_KEY = "route-camp.collapsed";
+
+function loadCollapsed(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+const collapsed = new Set<string>(loadCollapsed());
+
+function setCollapsed(key: string, value: boolean): void {
+  if (value) collapsed.add(key);
+  else collapsed.delete(key);
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
+  } catch {
+    // Not stored; the change still applies to this page view.
+  }
+}
 
 // --- Map --------------------------------------------------------------------
 
@@ -124,17 +162,34 @@ map.on("style.load", () => {
 
 let markers: maplibregl.Marker[] = [];
 
+// Stops of the route on the map, numbered by position ("2" or "2,5" when the POI appears twice).
+function stopLabels(): Map<number, string> {
+  const positions = new Map<number, number[]>();
+  const route = state.routes.find((r) => r.id === state.shownRouteId);
+  route?.poi_ids.forEach((poiId, index) => positions.set(poiId, [...(positions.get(poiId) ?? []), index + 1]));
+  return new Map([...positions].map(([poiId, numbers]) => [poiId, numbers.join(",")]));
+}
+
 function renderMarkers(): void {
   markers.forEach((marker) => marker.remove());
+  const stops = stopLabels();
   markers = state.pois.map((poi) => {
-    const element = h("div", {
-      className: state.selected.includes(poi.id) ? "marker selected" : "marker",
-      title: poi.name,
-      onclick: (event: Event) => {
-        event.stopPropagation();
-        toggleSelected(poi.id);
+    const stop = stops.get(poi.id);
+    const classes = ["marker"];
+    if (state.selected.includes(poi.id)) classes.push("selected");
+    if (stop) classes.push("stop");
+    const element = h(
+      "div",
+      {
+        className: classes.join(" "),
+        title: stop ? `Stop ${stop}: ${poi.name}` : poi.name,
+        onclick: (event: Event) => {
+          event.stopPropagation();
+          toggleSelected(poi.id);
+        },
       },
-    });
+      stop ?? "",
+    );
     return new maplibregl.Marker({ element }).setLngLat([poi.lon, poi.lat]).addTo(map);
   });
 }
@@ -152,6 +207,7 @@ function showRoute(route: Route): void {
   state.shownRouteId = route.id;
   const summary = $("route-summary");
   summary.textContent = routeSummary(route);
+  renderMarkers();
   const source = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
   if (!source) {
     pendingRoute = route; // drawn by the style.load handler
@@ -177,6 +233,55 @@ function clearShownRoute(): void {
   pendingRoute = null;
   $("route-summary").textContent = "";
   map.getSource<maplibregl.GeoJSONSource>("route")?.setData(emptyLine);
+  renderMarkers();
+}
+
+// --- Folders ----------------------------------------------------------------
+
+const UNTAGGED = "Untagged";
+
+// Folders are tags. An item with several tags appears in each of its folders; untagged items go in
+// a last "Untagged" folder. `prefix` keeps the collapsed keys of POI and route folders apart.
+function renderFolders<T extends { id: number; name: string; tags: string[] }>(
+  container: HTMLElement,
+  prefix: string,
+  items: T[],
+  renderItem: (item: T) => HTMLElement,
+  rerender: () => void,
+): void {
+  const folders = new Map<string, T[]>();
+  for (const item of items) {
+    for (const tag of item.tags.length ? item.tags : [""]) {
+      folders.set(tag, [...(folders.get(tag) ?? []), item]);
+    }
+  }
+  const tags = [...folders.keys()].filter(Boolean).sort();
+  if (folders.has("")) tags.push("");
+
+  container.replaceChildren(
+    ...tags.map((tag) => {
+      const key = `${prefix}/${tag}`;
+      const isCollapsed = collapsed.has(key);
+      const list = (folders.get(tag) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
+      return h(
+        "li",
+        { className: "folder" },
+        h(
+          "button",
+          {
+            className: "folder-head",
+            "aria-expanded": !isCollapsed,
+            onclick: () => {
+              setCollapsed(key, !isCollapsed);
+              rerender();
+            },
+          },
+          `${tag || UNTAGGED} (${list.length})`,
+        ),
+        ...(isCollapsed ? [] : [h("ul", { className: "folder-items" }, ...list.map(renderItem))]),
+      );
+    }),
+  );
 }
 
 // --- Sidebar: POIs ----------------------------------------------------------
@@ -189,50 +294,39 @@ function toggleSelected(poiId: number): void {
   renderMarkers();
 }
 
-function renderPois(): void {
-  $("poi-list").replaceChildren(
-    ...state.pois.map((poi) =>
-      h(
-        "li",
-        { className: "item" },
-        h("input", {
-          type: "checkbox",
-          checked: state.selected.includes(poi.id),
-          onchange: () => toggleSelected(poi.id),
-        }),
-        h(
-          "span",
-          {
-            className: "name",
-            title: poi.name,
-            onclick: () => map.flyTo({ center: [poi.lon, poi.lat], zoom: 12 }),
-          },
-          poi.name,
-        ),
-        h("span", { className: "meta" }, poi.tags.join(", ")),
-        h("button", {
-          title: "Delete POI",
-          onclick: () =>
-            run(async () => {
-              if (!(await askConfirm(`Delete POI "${poi.name}"? Routes that use it will lose that stop.`, "Delete"))) return;
-              await api.deletePoi(poi.id);
-              state.selected = state.selected.filter((id) => id !== poi.id);
-              await refresh();
-            }),
-        }, "delete"),
-      ),
+function renderPoiItem(poi: POI): HTMLElement {
+  return h(
+    "li",
+    { className: "item" },
+    h("input", {
+      type: "checkbox",
+      checked: state.selected.includes(poi.id),
+      onchange: () => toggleSelected(poi.id),
+    }),
+    h(
+      "span",
+      {
+        className: "name",
+        title: poi.name,
+        onclick: () => map.flyTo({ center: [poi.lon, poi.lat], zoom: 12 }),
+      },
+      poi.name,
     ),
+    h("button", {
+      title: "Delete POI",
+      onclick: () =>
+        run(async () => {
+          if (!(await askConfirm(`Delete POI "${poi.name}"? Routes that use it will lose that stop.`, "Delete"))) return;
+          await api.deletePoi(poi.id);
+          state.selected = state.selected.filter((id) => id !== poi.id);
+          await refresh();
+        }),
+    }, "delete"),
   );
 }
 
-function renderTagFilter(tags: Tag[]): void {
-  const select = $<HTMLSelectElement>("tag-filter");
-  const current = select.value;
-  select.replaceChildren(
-    h("option", { value: "" }, "All"),
-    ...tags.map((tag) => h("option", { value: tag.name }, tag.name)),
-  );
-  select.value = current;
+function renderPois(): void {
+  renderFolders($("poi-list"), "poi", state.pois, renderPoiItem, renderPois);
 }
 
 // --- Sidebar: routes --------------------------------------------------------
@@ -255,44 +349,98 @@ async function optimize(route: Route): Promise<void> {
   );
 }
 
-function renderRoutes(): void {
-  $("route-list").replaceChildren(
-    ...state.routes.map((route) =>
-      h(
+// The stops of a route, in order. Clicking one flies the map to it.
+function renderStops(route: Route): HTMLElement {
+  return h(
+    "ol",
+    { className: "route-stops" },
+    ...route.poi_ids.map((poiId, index) => {
+      const poi = state.pois.find((p) => p.id === poiId);
+      return h(
         "li",
-        { className: "item" },
-        h(
-          "span",
-          { className: "name", title: route.name, onclick: () => showRoute(route) },
-          `${route.name} (${route.geometry_source === "imported" ? "track" : route.profile})`,
-        ),
-        h(
-          "span",
-          { className: "meta" },
-          route.distance_m == null ? `${route.poi_ids.length} stops` : formatKm(route.distance_m),
-        ),
-        h("button", {
-          title: "Calculate with GraphHopper",
-          onclick: () => run(() => calculate(route)),
-        }, "calc"),
-        h("button", {
-          title: "Reorder stops for shortest time",
-          onclick: () => run(() => optimize(route)),
-        }, "optimize"),
-        h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
-        h("button", {
-          title: "Delete route",
-          onclick: () =>
-            run(async () => {
-              if (!(await askConfirm(`Delete route "${route.name}"?`, "Delete"))) return;
-              await api.deleteRoute(route.id);
-              if (state.shownRouteId === route.id) clearShownRoute();
-              await refresh();
-            }),
-        }, "delete"),
+        {},
+        h("span", { className: "stop-number" }, String(index + 1)),
+        poi
+          ? h("span", {
+              className: "name",
+              title: poi.name,
+              onclick: () => map.flyTo({ center: [poi.lon, poi.lat], zoom: 12 }),
+            }, poi.name)
+          : h("span", { className: "name meta" }, "(deleted POI)"),
+      );
+    }),
+  );
+}
+
+function renderRouteItem(route: Route): HTMLElement {
+  const expanded = expandedRoutes.has(route.id);
+  const toggleStops = () => {
+    if (expanded) expandedRoutes.delete(route.id);
+    else expandedRoutes.add(route.id);
+    renderRoutes();
+  };
+  return h(
+    "li",
+    { className: "route" },
+    h(
+      "div",
+      { className: "route-head" },
+      h("button", {
+        className: "expand",
+        title: expanded ? "Hide stops" : "Show stops",
+        "aria-expanded": expanded,
+        onclick: toggleStops,
+      }),
+      h(
+        "span",
+        { className: "name", title: route.name, onclick: () => showRoute(route) },
+        `${route.name} (${route.geometry_source === "imported" ? "track" : route.profile})`,
       ),
     ),
+    h(
+      "div",
+      { className: "route-actions" },
+      h(
+        "span",
+        { className: "meta" },
+        route.distance_m == null ? `${route.poi_ids.length} stops` : formatKm(route.distance_m),
+      ),
+      h("button", {
+        title: "Calculate with GraphHopper",
+        onclick: () => run(() => calculate(route)),
+      }, "calc"),
+      h("button", {
+        title: "Reorder stops for shortest time",
+        onclick: () => run(() => optimize(route)),
+      }, "optimize"),
+      h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
+      h("button", {
+        title: "Edit tags",
+        onclick: () =>
+          run(async () => {
+            const tags = await askTags(route.tags);
+            if (tags === null) return;
+            await api.updateRoute(route.id, { tags });
+            await refresh();
+          }),
+      }, "tags"),
+      h("button", {
+        title: "Delete route",
+        onclick: () =>
+          run(async () => {
+            if (!(await askConfirm(`Delete route "${route.name}"?`, "Delete"))) return;
+            await api.deleteRoute(route.id);
+            if (state.shownRouteId === route.id) clearShownRoute();
+            await refresh();
+          }),
+      }, "delete"),
+    ),
+    ...(expanded ? [renderStops(route)] : []),
   );
+}
+
+function renderRoutes(): void {
+  renderFolders($("route-list"), "route", state.routes, renderRouteItem, renderRoutes);
 }
 
 // --- Sidebar: plans ---------------------------------------------------------
@@ -347,9 +495,8 @@ function renderPlans(): void {
             title: "Edit tags",
             onclick: () =>
               run(async () => {
-                const input = await askText("Tags, comma separated?", plan.tags.join(", "));
-                if (input === null) return;
-                const tags = input.split(",").map((t) => t.trim()).filter(Boolean);
+                const tags = await askTags(plan.tags);
+                if (tags === null) return;
                 await api.updatePlan(plan.id, { tags });
                 await refresh();
               }),
@@ -404,17 +551,10 @@ function renderPlans(): void {
 // --- Data loading -----------------------------------------------------------
 
 async function refresh(): Promise<void> {
-  const tag = $<HTMLSelectElement>("tag-filter").value;
-  const [pois, routes, plans, tags] = await Promise.all([
-    api.listPois(tag),
-    api.listRoutes(),
-    api.listPlans(tag),
-    api.listTags(),
-  ]);
+  const [pois, routes, plans] = await Promise.all([api.listPois(), api.listRoutes(), api.listPlans()]);
   state.pois = pois;
   state.routes = routes;
   state.plans = plans;
-  renderTagFilter(tags);
   renderPois();
   renderRoutes();
   renderPlans();
@@ -423,7 +563,22 @@ async function refresh(): Promise<void> {
 
 // --- Wire up controls -------------------------------------------------------
 
-$<HTMLSelectElement>("tag-filter").onchange = () => run(refresh);
+// Each section header toggles its body; the state is remembered like the folders.
+for (const toggle of document.querySelectorAll<HTMLButtonElement>(".section-toggle")) {
+  const section = toggle.dataset.section ?? "";
+  const key = `section/${section}`;
+  const body = $(`${section}-body`);
+  const apply = () => {
+    const isCollapsed = collapsed.has(key);
+    toggle.setAttribute("aria-expanded", String(!isCollapsed));
+    body.hidden = isCollapsed;
+  };
+  toggle.onclick = () => {
+    setCollapsed(key, !collapsed.has(key));
+    apply();
+  };
+  apply();
+}
 
 $("tag-selected").onclick = () =>
   run(async () => {

@@ -93,3 +93,59 @@ button:disabled { opacity: 0.4; cursor: default; }
 }
 #app-dialog::backdrop { background: rgb(0 0 0 / 0.4); }
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+/* Collapsible sections and folders. The chevron follows aria-expanded. */
+.section-toggle {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+[aria-expanded]::before { content: "▾"; display: inline-block; width: 1em; }
+[aria-expanded="false"]::before { content: "▸"; }
+
+button.folder-head {
+  display: block;
+  width: 100%;
+  margin: 6px 0 2px;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+ul.folder-items { margin-left: 8px; }
+
+/* Routes: the name gets the full row; actions sit on a line below it. */
+li.route { padding: 4px 0; }
+.route-head { display: flex; align-items: center; gap: 4px; }
+.route-head .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-left: 22px; }
+.route-actions .meta { margin-right: auto; }
+button.expand { background: none; border: 0; padding: 0 2px; margin: 0; color: var(--muted); }
+
+ol.route-stops { margin: 4px 0 4px 22px; }
+ol.route-stops li { display: flex; gap: 6px; padding: 2px 0; }
+ol.route-stops .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stop-number { min-width: 1.5em; color: var(--muted); text-align: right; }
+
+/* Stops of the route on the map: blue, numbered, so they stand apart from other POIs. */
+.marker.stop {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 11px;
+  background: #1971c2;
+  color: #fff;
+  font: 600 12px/18px system-ui, sans-serif;
+  text-align: center;
+  white-space: nowrap;
+}

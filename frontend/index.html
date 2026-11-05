@@ -16,15 +16,14 @@
       </section>
 
       <section>
-        <h2>POIs</h2>
-        <label>Filter by tag
-          <select id="tag-filter"></select>
-        </label>
-        <p class="hint">Click the map to add a POI. Tick POIs to build a route or tag them.</p>
-        <ul id="poi-list"></ul>
-        <div class="row">
-          <input id="tag-input" placeholder="tag name" />
-          <button id="tag-selected">Tag selected</button>
+        <h2><button class="section-toggle" data-section="pois" aria-expanded="true">POIs</button></h2>
+        <div id="pois-body">
+          <p class="hint">Click the map to add a POI. Tick POIs to build a route or tag them. Folders are tags: a POI with several tags appears in each of its folders.</p>
+          <ul id="poi-list"></ul>
+          <div class="row">
+            <input id="tag-input" placeholder="tag name" />
+            <button id="tag-selected">Tag selected</button>
+          </div>
         </div>
       </section>
 
@@ -41,20 +40,24 @@
       </section>
 
       <section>
-        <h2>Routes</h2>
-        <ul id="route-list"></ul>
-        <p id="route-summary" class="hint"></p>
-        <button id="map-clear" title="Hide the route line and untick POIs (nothing is deleted)">Clear map</button>
+        <h2><button class="section-toggle" data-section="routes" aria-expanded="true">Routes</button></h2>
+        <div id="routes-body">
+          <ul id="route-list"></ul>
+          <p id="route-summary" class="hint"></p>
+          <button id="map-clear" title="Hide the route line and untick POIs (nothing is deleted)">Clear map</button>
+        </div>
       </section>
 
       <section>
-        <h2>Plans</h2>
-        <p class="hint">Plans group routes in order. Totals count routes that have a distance.</p>
-        <div class="row">
-          <input id="plan-name" placeholder="new plan name" />
-          <button id="plan-create">New plan</button>
+        <h2><button class="section-toggle" data-section="plans" aria-expanded="true">Plans</button></h2>
+        <div id="plans-body">
+          <p class="hint">Plans group routes in order. Totals count routes that have a distance.</p>
+          <div class="row">
+            <input id="plan-name" placeholder="new plan name" />
+            <button id="plan-create">New plan</button>
+          </div>
+          <ul id="plan-list"></ul>
         </div>
-        <ul id="plan-list"></ul>
       </section>
     </aside>
     <div id="map"></div>

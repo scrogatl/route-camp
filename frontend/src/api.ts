@@ -90,7 +90,7 @@ const send = (method: string, body?: unknown): RequestInit => ({
 export const api = {
   config: () => request<ClientConfig>("/config"),
 
-  listPois: (tag: string) => request<POI[]>(`/pois${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`),
+  listPois: () => request<POI[]>("/pois"),
   createPoi: (poi: { name: string; lat: number; lon: number; tags?: string[] }) =>
     request<POI>("/pois", send("POST", poi)),
   deletePoi: (id: number) => request<void>(`/pois/${id}`, send("DELETE")),
@@ -98,6 +98,7 @@ export const api = {
   listRoutes: () => request<Route[]>("/routes"),
   createRoute: (route: { name: string; profile: Profile; poi_ids: number[] }) =>
     request<Route>("/routes", send("POST", route)),
+  updateRoute: (id: number, patch: Partial<Pick<Route, "tags">>) => request<Route>(`/routes/${id}`, send("PATCH", patch)),
   deleteRoute: (id: number) => request<void>(`/routes/${id}`, send("DELETE")),
   calculateRoute: (id: number, replaceImported: boolean) =>
     request<Route>(`/routes/${id}/calculate?replace_imported=${replaceImported}`, send("POST")),
@@ -105,7 +106,7 @@ export const api = {
     request<{ route: Route; source: string }>(`/routes/${id}/optimize?replace_imported=${replaceImported}`, send("POST")),
   routeGpxUrl: (id: number) => `/api/routes/${id}/gpx`,
 
-  listPlans: (tag: string) => request<Plan[]>(`/plans${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`),
+  listPlans: () => request<Plan[]>("/plans"),
   createPlan: (plan: { name: string; route_ids?: number[]; tags?: string[] }) =>
     request<Plan>("/plans", send("POST", plan)),
   updatePlan: (id: number, patch: Partial<Pick<Plan, "name" | "route_ids" | "tags">>) =>
