@@ -210,6 +210,10 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   `main.ts`). An item with several tags appears in each of its folders; untagged items go in a last
   "Untagged" folder. Each folder header shows the name and count and collapses on click. The old tag
   filter was removed, since folders do the same job.
+- **Bulk tagging of POI folders:** each POI folder header has "tag all" (adds a tag, asked for in a
+  dialog, to every POI in that folder) and, except on Untagged, "untag all" (removes that folder's tag
+  from all its POIs after a confirm; they move to their other folders or to Untagged). Both work while
+  the folder is collapsed. Requests go one POI at a time so a big folder doesn't flood SQLite.
 - **Sections collapse:** the POIs, Routes and Plans headers toggle their body. Collapsed sections and
   folders are remembered in `localStorage` under `route-camp.collapsed` (a list of keys such as
   `section/pois` or `poi/<tag>`), wrapped in try/catch because storage can be unavailable.

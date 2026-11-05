@@ -117,6 +117,8 @@ export const api = {
   createTag: (name: string) => request<Tag>("/tags", send("POST", { name })),
   tagItem: (tagId: number, kind: ItemKind, id: number) =>
     request<void>(`/tags/${tagId}/items`, send("POST", { kind, id })),
+  untagItem: (tagId: number, kind: ItemKind, id: number) =>
+    request<void>(`/tags/${tagId}/items/${kind}/${id}`, send("DELETE")),
 
   importGpx: (file: File) => {
     const body = new FormData();

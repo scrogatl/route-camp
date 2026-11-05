@@ -149,3 +149,8 @@ ol.route-stops .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden;
   text-align: center;
   white-space: nowrap;
 }
+
+/* Folder header row: the toggle takes the width, bulk actions sit at the right. */
+.folder-row { display: flex; align-items: center; gap: 4px; }
+.folder-row button.folder-head { flex: 1; min-width: 0; }
+button.folder-action { font-size: 11px; padding: 0 6px; margin: 0; }

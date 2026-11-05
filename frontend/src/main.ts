@@ -242,12 +242,14 @@ const UNTAGGED = "Untagged";
 
 // Folders are tags. An item with several tags appears in each of its folders; untagged items go in
 // a last "Untagged" folder. `prefix` keeps the collapsed keys of POI and route folders apart.
+// `folderActions` adds buttons beside a folder's header; tag is "" for the Untagged folder.
 function renderFolders<T extends { id: number; name: string; tags: string[] }>(
   container: HTMLElement,
   prefix: string,
   items: T[],
   renderItem: (item: T) => HTMLElement,
   rerender: () => void,
+  folderActions: (tag: string, list: T[]) => HTMLElement[] = () => [],
 ): void {
   const folders = new Map<string, T[]>();
   for (const item of items) {
@@ -267,16 +269,21 @@ function renderFolders<T extends { id: number; name: string; tags: string[] }>(
         "li",
         { className: "folder" },
         h(
-          "button",
-          {
-            className: "folder-head",
-            "aria-expanded": !isCollapsed,
-            onclick: () => {
-              setCollapsed(key, !isCollapsed);
-              rerender();
+          "div",
+          { className: "folder-row" },
+          h(
+            "button",
+            {
+              className: "folder-head",
+              "aria-expanded": !isCollapsed,
+              onclick: () => {
+                setCollapsed(key, !isCollapsed);
+                rerender();
+              },
             },
-          },
-          `${tag || UNTAGGED} (${list.length})`,
+            `${tag || UNTAGGED} (${list.length})`,
+          ),
+          ...folderActions(tag, list),
         ),
         ...(isCollapsed ? [] : [h("ul", { className: "folder-items" }, ...list.map(renderItem))]),
       );
@@ -325,8 +332,44 @@ function renderPoiItem(poi: POI): HTMLElement {
   );
 }
 
+// One request per POI, in sequence, so a large folder doesn't flood the backend (SQLite) at once.
+async function forEachPoi(pois: POI[], action: (poi: POI) => Promise<void>): Promise<void> {
+  for (const poi of pois) await action(poi);
+}
+
+// "tag all" adds a tag to every POI in the folder; "untag all" takes the folder's own tag off them
+// (they move to their other folders, or to Untagged). Works whether the folder is open or collapsed.
+function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
+  const tagAll = h("button", {
+    className: "folder-action",
+    title: `Add a tag to all ${pois.length} POIs in this folder`,
+    onclick: () =>
+      run(async () => {
+        const name = (await askText(`Tag all ${pois.length} POIs in "${tag || UNTAGGED}" with:`))?.trim();
+        if (!name) return;
+        const created = await api.createTag(name);
+        await forEachPoi(pois, (poi) => api.tagItem(created.id, "poi", poi.id));
+        await refresh();
+      }),
+  }, "tag all");
+  if (!tag) return [tagAll];
+  const untagAll = h("button", {
+    className: "folder-action",
+    title: `Remove the "${tag}" tag from all ${pois.length} POIs`,
+    onclick: () =>
+      run(async () => {
+        const message = `Remove the "${tag}" tag from all ${pois.length} POIs? The POIs are kept.`;
+        if (!(await askConfirm(message, "Untag all"))) return;
+        const found = (await api.listTags()).find((t) => t.name === tag);
+        if (found) await forEachPoi(pois, (poi) => api.untagItem(found.id, "poi", poi.id));
+        await refresh();
+      }),
+  }, "untag all");
+  return [tagAll, untagAll];
+}
+
 function renderPois(): void {
-  renderFolders($("poi-list"), "poi", state.pois, renderPoiItem, renderPois);
+  renderFolders($("poi-list"), "poi", state.pois, renderPoiItem, renderPois, poiFolderActions);
 }
 
 // --- Sidebar: routes --------------------------------------------------------
