@@ -5,6 +5,8 @@ take on the Garmin BaseCamp workflow: POIs are stored once and *referenced* by r
 folders, and routing is done by [GraphHopper](https://www.graphhopper.com/) on OpenStreetMap data, so it runs
 with no paid services.
 
+The full design, rules and rebuild notes are in [docs/SPEC.md](docs/SPEC.md).
+
 > Status: first draft / scaffold. Expect rough edges. See [Known gaps](#known-gaps).
 
 ## Quick start
