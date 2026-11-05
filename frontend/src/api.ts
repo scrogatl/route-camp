@@ -9,6 +9,7 @@ export interface POI {
   lon: number;
   notes: string | null;
   score: number | null;
+  state: string | null; // e.g. "GA", from a rally CSV
   tags: string[];
 }
 
@@ -77,6 +78,15 @@ export interface ImportSummary {
   routes: ImportedRoute[];
 }
 
+export interface RallyImportSummary {
+  bonuses: number;
+  pois_created: number;
+  pois_matched: number;
+  pois_updated: number;
+  created: string[];
+  updated: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -143,5 +153,10 @@ export const api = {
     const body = new FormData();
     body.append("file", file);
     return request<ImportSummary>("/gpx/import", { method: "POST", body });
+  },
+  importRally: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<RallyImportSummary>("/rally/import", { method: "POST", body });
   },
 };

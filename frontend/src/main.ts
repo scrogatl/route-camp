@@ -5,6 +5,7 @@ import { askConfirm, askDecision, askText, hideUndo, showMessage, showUndo } fro
 import {
   api,
   type ImportSummary,
+  type RallyImportSummary,
   type LonLat,
   type OptimizePreview,
   type OrderSummary,
@@ -124,6 +125,15 @@ function importMessage(summary: ImportSummary): string {
     `POIs: ${summary.pois_created} new, ${summary.pois_matched} already there.`,
     `Routes: ${summary.routes_created} new${created.length ? ` (${created.join(", ")})` : ""}, ` +
       `${summary.routes_matched} already imported${matched.length ? ` (${matched.join(", ")})` : ""}.`,
+  ].join("\n");
+}
+
+function rallyImportMessage(summary: RallyImportSummary): string {
+  const created = summary.created.length ? ` (${summary.created.slice(0, 10).join(", ")}${summary.created.length > 10 ? ", …" : ""})` : "";
+  return [
+    `Rally CSV: ${summary.bonuses} bonus${summary.bonuses === 1 ? "" : "es"}.`,
+    `POIs: ${summary.pois_created} new${created}, ${summary.pois_matched} already there.`,
+    `${summary.pois_updated} of those got new points or a state.`,
   ].join("\n");
 }
 
@@ -450,9 +460,17 @@ function toggleSelected(poiId: number): void {
   state.selected = state.selected.includes(poiId)
     ? state.selected.filter((id) => id !== poiId)
     : [...state.selected, poiId];
+  renderSelection();
+}
+
+// Everything that shows the selection: POI list, "add ticked (N)" on expanded routes, markers, the
+// Selected list and the Bonuses table. They all read state.selected, so ticking anywhere shows everywhere.
+function renderSelection(): void {
   renderPois();
-  renderRoutes(); // "add ticked (N)" on expanded routes follows the ticks
+  renderRoutes();
   renderMarkers();
+  renderSelected();
+  renderBonuses();
 }
 
 // Sets or clears a POI's score. Blank clears it; anything else must be a whole number of zero or more.
@@ -520,9 +538,7 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
       state.selected = allTicked
         ? state.selected.filter((id) => !ids.includes(id))
         : [...state.selected, ...ids.filter((id) => !state.selected.includes(id))];
-      renderPois();
-      renderRoutes();
-      renderMarkers();
+      renderSelection();
     },
   }, allTicked ? "unselect" : "select");
   const tagAll = h("button", {
@@ -656,6 +672,330 @@ async function retagPois(tagName: string, ids: number[]): Promise<void> {
 
 function renderPois(): void {
   renderFolders($("poi-list"), "poi", state.pois, renderPoiItem, renderPois, poiFolderActions);
+}
+
+// --- Selected: the ticked bonuses, in the order the route will take -------------
+
+const formatPoints = (points: number): string => points.toLocaleString("en-US");
+
+function selectedPois(): POI[] {
+  return state.selected
+    .map((id) => state.pois.find((poi) => poi.id === id))
+    .filter((poi): poi is POI => poi !== undefined);
+}
+
+function selectionTotals(): string {
+  const pois = selectedPois();
+  const points = pois.reduce((sum, poi) => sum + (poi.score ?? 0), 0);
+  return `${pois.length} selected · ${formatPoints(points)} points`;
+}
+
+function setSelectedOrder(ids: number[]): void {
+  state.selected = ids;
+  renderSelection();
+}
+
+// Drag the ⠿ handle to move a bonus (pointer events, so a mouse, pen or finger all work); ↑ / ↓ do the
+// same from the keyboard. Only the user's moves change the order.
+// Listens on the window, not with pointer capture: moving the row in the DOM would drop the capture.
+function startDrag(event: PointerEvent, item: HTMLElement): void {
+  const list = item.parentElement as HTMLElement;
+  event.preventDefault();
+  item.classList.add("dragging");
+  document.body.classList.add("reordering");
+  const move = (e: PointerEvent) => {
+    const target = [...list.children].find((el) => {
+      if (el === item) return false;
+      const box = el.getBoundingClientRect();
+      return e.clientY >= box.top && e.clientY <= box.bottom;
+    });
+    if (!target) return;
+    const box = target.getBoundingClientRect();
+    const before = e.clientY < box.top + box.height / 2 ? target : target.nextSibling;
+    if (before !== item && before !== item.nextSibling) list.insertBefore(item, before);
+  };
+  const end = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    item.classList.remove("dragging");
+    document.body.classList.remove("reordering");
+    const order = [...list.children].map((el) => Number((el as HTMLElement).dataset.id));
+    if (order.join() !== state.selected.join()) setSelectedOrder(order);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+}
+
+function renderSelected(): void {
+  const pois = selectedPois();
+  const last = pois.length - 1;
+  $("selected-count").textContent = pois.length ? `(${pois.length})` : "";
+  $("selected-total").textContent = selectionTotals();
+  $("selected-list").replaceChildren(
+    ...pois.map((poi, index) => {
+      const move = (step: number) => {
+        const ids = [...state.selected];
+        [ids[index], ids[index + step]] = [ids[index + step], ids[index]];
+        setSelectedOrder(ids);
+      };
+      const item: HTMLElement = h(
+        "li",
+        { className: "selected-item" },
+        h("span", {
+          className: "drag-handle",
+          title: "Drag to move",
+          "aria-hidden": "true",
+          onpointerdown: (event: PointerEvent) => startDrag(event, item),
+        }, "⠿"),
+        h("span", { className: "stop-number" }, String(index + 1)),
+        h("span", {
+          className: "name",
+          title: poi.name,
+          onclick: () => {
+            setView("map");
+            map.flyTo({ center: [poi.lon, poi.lat], zoom: 12 });
+          },
+        }, poi.name),
+        h("span", { className: "meta" }, poi.score == null ? "" : formatPoints(poi.score)),
+        h("button", { title: "Move up", "aria-label": `Move ${poi.name} up`, disabled: index === 0, onclick: () => move(-1) }, "↑"),
+        h("button", { title: "Move down", "aria-label": `Move ${poi.name} down`, disabled: index === last, onclick: () => move(1) }, "↓"),
+        h("button", {
+          title: "Remove from the selection",
+          "aria-label": `Remove ${poi.name}`,
+          onclick: () => setSelectedOrder(state.selected.filter((id) => id !== poi.id)),
+        }, "×"),
+      );
+      item.dataset.id = String(poi.id);
+      return item;
+    }),
+  );
+  if (!pois.length) $("selected-list").append(h("li", { className: "hint" }, "Nothing selected yet."));
+
+  const picker = $<HTMLSelectElement>("append-route");
+  const current = picker.value;
+  picker.replaceChildren(
+    h("option", { value: "" }, state.routes.length ? "append to route…" : "no routes yet"),
+    ...state.routes
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((route) => h("option", { value: String(route.id) }, route.name)),
+  );
+  if (state.routes.some((route) => String(route.id) === current)) picker.value = current;
+  ($("route-create") as HTMLButtonElement).disabled = pois.length < 2;
+  ($("append-selected") as HTMLButtonElement).disabled = pois.length === 0;
+}
+
+// Creates the route through the selection in exactly its order, then calculates the line in that order.
+async function createRouteFromSelection(): Promise<void> {
+  const nameInput = $<HTMLInputElement>("route-name");
+  const name = nameInput.value.trim();
+  if (state.selected.length < 2) {
+    notify("Select at least two bonuses.");
+    return;
+  }
+  if (!name) {
+    notify("Name the route first.");
+    nameInput.focus();
+    return;
+  }
+  const profile = $<HTMLSelectElement>("route-profile").value as Profile;
+  const route = await api.createRoute({ name, profile, poi_ids: [...state.selected] });
+  nameInput.value = "";
+  state.selected = [];
+  setView("map");
+  try {
+    const calculated = await api.calculateRoute(route.id, false);
+    await refresh();
+    showRoute(calculated);
+  } catch (err) {
+    // The route is saved either way; only its line is missing, and calc retries it.
+    await refresh();
+    showRoute(state.routes.find((r) => r.id === route.id) ?? route);
+    throw err;
+  }
+}
+
+// Adds the selection to the end of an existing route, in order, skipping stops it already has.
+// Like any stop change, the line is cleared until the user presses recalc.
+async function appendSelectionToRoute(): Promise<void> {
+  const route = state.routes.find((r) => r.id === Number($<HTMLSelectElement>("append-route").value));
+  if (!route) {
+    notify("Pick a route to append to.");
+    return;
+  }
+  const added = state.selected.filter((id) => !route.poi_ids.includes(id));
+  if (!added.length) {
+    notify(`"${route.name}" already has every selected bonus.`);
+    return;
+  }
+  if (!(await confirmReplaceImported(route, "Adding stops"))) return;
+  state.selected = [];
+  expandedRoutes.add(route.id);
+  setView("map");
+  await setStops(route, [...route.poi_ids, ...added]);
+  showRoute(state.routes.find((r) => r.id === route.id) ?? route);
+}
+
+// --- Bonuses table ----------------------------------------------------------
+
+type SortKey = "name" | "score" | "state" | "tags" | "routes" | "notes";
+const SORT_KEY = "route-camp.bonus-sort";
+const NUMERIC_SORT: SortKey[] = ["score", "routes"];
+const UNTAGGED_FILTER = "\u0000untagged"; // the Tag filter's "Untagged" option; no tag can be named this
+
+function loadSort(): { key: SortKey; descending: boolean } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SORT_KEY) ?? "null") as { key?: string; descending?: boolean } | null;
+    const keys: SortKey[] = ["name", "score", "state", "tags", "routes", "notes"];
+    const key = keys.find((k) => k === saved?.key);
+    if (key) return { key, descending: Boolean(saved?.descending) };
+  } catch {
+    // Storage unavailable or unreadable: default sort.
+  }
+  return { key: "name", descending: false };
+}
+
+let bonusSort = loadSort();
+
+function routeCounts(): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const route of state.routes) {
+    for (const id of new Set(route.poi_ids)) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+// The POIs the filter box and tag picker let through.
+function shownBonuses(): POI[] {
+  const text = $<HTMLInputElement>("bonus-filter").value.trim().toLowerCase();
+  const tag = $<HTMLSelectElement>("bonus-tag").value;
+  return state.pois.filter((poi) => {
+    if (tag === UNTAGGED_FILTER ? poi.tags.length > 0 : tag && !poi.tags.includes(tag)) return false;
+    if (!text) return true;
+    return [poi.name, poi.state ?? "", poi.notes ?? "", ...poi.tags].some((field) => field.toLowerCase().includes(text));
+  });
+}
+
+function sortValue(poi: POI, key: SortKey, counts: Map<number, number>): string | number | null {
+  switch (key) {
+    case "score": return poi.score;
+    case "routes": return counts.get(poi.id) ?? 0;
+    case "state": return poi.state || null;
+    case "tags": return poi.tags.join(", ") || null;
+    case "notes": return poi.notes || null;
+    default: return poi.name;
+  }
+}
+
+function sortBonuses(pois: POI[], counts: Map<number, number>): POI[] {
+  const { key, descending } = bonusSort;
+  return pois.slice().sort((a, b) => {
+    const x = sortValue(a, key, counts);
+    const y = sortValue(b, key, counts);
+    if (x === null || y === null) return Number(x === null) - Number(y === null); // blanks last
+    const order = typeof x === "number" && typeof y === "number"
+      ? x - y
+      : String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: "base" });
+    return (descending ? -order : order) || a.name.localeCompare(b.name);
+  });
+}
+
+function renderTagFilter(): void {
+  const picker = $<HTMLSelectElement>("bonus-tag");
+  const current = picker.value;
+  const tags = [...new Set(state.pois.flatMap((poi) => poi.tags))].sort();
+  picker.replaceChildren(
+    h("option", { value: "" }, "all tags"),
+    ...tags.map((tag) => h("option", { value: tag }, tag)),
+    h("option", { value: UNTAGGED_FILTER }, UNTAGGED),
+  );
+  picker.value = tags.includes(current) || current === UNTAGGED_FILTER ? current : "";
+}
+
+function renderBonuses(): void {
+  renderTagFilter();
+  const counts = routeCounts();
+  const shown = sortBonuses(shownBonuses(), counts);
+  $("bonus-total").textContent = `${selectionTotals()} · showing ${shown.length} of ${state.pois.length}`;
+
+  for (const th of document.querySelectorAll<HTMLElement>("#bonus-table th[data-sort]")) {
+    if (th.dataset.sort === bonusSort.key) th.setAttribute("aria-sort", bonusSort.descending ? "descending" : "ascending");
+    else th.removeAttribute("aria-sort");
+  }
+  const shownIds = shown.map((poi) => poi.id);
+  const allTicked = shownIds.length > 0 && shownIds.every((id) => state.selected.includes(id));
+  const tickAll = h("input", {
+    type: "checkbox",
+    title: allTicked ? "Untick every bonus shown" : "Tick every bonus shown",
+    checked: allTicked,
+    onchange: () => tickShown(!allTicked),
+  });
+  document.querySelector("#bonus-table th.tick")?.replaceChildren(tickAll);
+
+  const body = document.querySelector("#bonus-table tbody") as HTMLElement;
+  body.replaceChildren(
+    ...shown.map((poi) => {
+      const order = state.selected.indexOf(poi.id) + 1;
+      return h(
+        "tr",
+        { className: order ? "selected" : "" },
+        h("td", { className: "tick" }, h("input", {
+          type: "checkbox",
+          checked: order > 0,
+          "aria-label": `Select ${poi.name}`,
+          onchange: () => toggleSelected(poi.id),
+        })),
+        h("td", {}, h("button", {
+          className: "link",
+          title: "Show on the map",
+          onclick: () => {
+            setView("map");
+            map.flyTo({ center: [poi.lon, poi.lat], zoom: 12 });
+          },
+        }, poi.name), ...(order ? [h("span", { className: "order-badge", title: `Number ${order} in the selection` }, String(order))] : [])),
+        h("td", { className: "num" }, poi.score == null ? "" : formatPoints(poi.score)),
+        h("td", {}, poi.state ?? ""),
+        h("td", {}, ...poi.tags.map((tag) => h("span", { className: "tag-chip plain" }, tag))),
+        h("td", { className: "num" }, String(counts.get(poi.id) ?? 0)),
+        h("td", { className: "notes" }, poi.notes ?? ""),
+      );
+    }),
+  );
+  if (!shown.length) {
+    body.append(h("tr", {}, h("td", { colSpan: 7, className: "hint" }, state.pois.length ? "No bonuses match the filter." : "No POIs yet. Import a rally CSV or a GPX file.")));
+  }
+}
+
+// Ticks (after the current selection, in the table's order) or unticks every bonus the filter shows.
+function tickShown(tick: boolean): void {
+  const ids = sortBonuses(shownBonuses(), routeCounts()).map((poi) => poi.id);
+  setSelectedOrder(tick
+    ? [...state.selected, ...ids.filter((id) => !state.selected.includes(id))]
+    : state.selected.filter((id) => !ids.includes(id)));
+}
+
+// --- Views: map or the Bonuses table ---------------------------------------
+
+type View = "map" | "bonuses";
+const VIEW_KEY = "route-camp.view";
+
+function setView(view: View): void {
+  const bonuses = view === "bonuses";
+  $("bonuses-view").hidden = !bonuses;
+  for (const id of ["sidebar", "sidebar-resizer", "map-view"]) $(id).hidden = bonuses;
+  // The Selected card goes with the view: beside the table, or back in the sidebar.
+  $(bonuses ? "bonus-side" : "selected-slot").append($("selected-card"));
+  for (const tab of document.querySelectorAll<HTMLButtonElement>(".view-tabs button")) {
+    tab.setAttribute("aria-pressed", String(tab.dataset.view === view));
+  }
+  if (!bonuses) map.resize(); // the map was hidden, so its size is stale
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // Not stored; the view still applies to this page view.
+  }
 }
 
 // --- Sidebar: routes --------------------------------------------------------
@@ -1068,6 +1408,8 @@ async function refresh(): Promise<void> {
   renderRoutes();
   renderPlans();
   renderMarkers();
+  renderSelected();
+  renderBonuses();
 }
 
 // --- Wire up controls -------------------------------------------------------
@@ -1190,28 +1532,55 @@ async function tagSelectedRoutes(add: boolean): Promise<void> {
 $("route-tag-selected").onclick = () => run(() => tagSelectedRoutes(true));
 $("route-untag-selected").onclick = () => run(() => tagSelectedRoutes(false));
 
-$("route-create").onclick = () =>
-  run(async () => {
-    const name = $<HTMLInputElement>("route-name").value.trim();
-    if (!name || state.selected.length < 2) {
-      notify("Name the route and tick at least two POIs.");
-      return;
+$("route-create").onclick = () => run(createRouteFromSelection);
+$("append-selected").onclick = () => run(appendSelectionToRoute);
+$("selected-clear").onclick = () => setSelectedOrder([]);
+
+for (const tab of document.querySelectorAll<HTMLButtonElement>(".view-tabs button")) {
+  tab.onclick = () => setView(tab.dataset.view === "bonuses" ? "bonuses" : "map");
+}
+$("bonus-filter").oninput = renderBonuses;
+$("bonus-tag").onchange = renderBonuses;
+$("bonus-tick-shown").onclick = () => tickShown(true);
+$("bonus-untick-shown").onclick = () => tickShown(false);
+
+// Click a heading to sort by it; again to reverse. Numbers sort highest first, text A to Z; blanks last.
+for (const th of document.querySelectorAll<HTMLElement>("#bonus-table th[data-sort]")) {
+  const key = th.dataset.sort as SortKey;
+  const sortBy = () => {
+    bonusSort = bonusSort.key === key
+      ? { key, descending: !bonusSort.descending }
+      : { key, descending: NUMERIC_SORT.includes(key) };
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify(bonusSort));
+    } catch {
+      // Not stored; the sort still applies to this page view.
     }
-    const profile = $<HTMLSelectElement>("route-profile").value as Profile;
-    await api.createRoute({ name, profile, poi_ids: [...state.selected] });
-    $<HTMLInputElement>("route-name").value = "";
-    state.selected = [];
-    await refresh();
-  });
+    renderBonuses();
+  };
+  th.tabIndex = 0;
+  th.title = "Sort by this column";
+  th.onclick = sortBy;
+  th.onkeydown = (event: KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      sortBy();
+    }
+  };
+}
+
+try {
+  if (localStorage.getItem(VIEW_KEY) === "bonuses") setView("bonuses");
+} catch {
+  // Storage unavailable: start on the map.
+}
 
 // Hides the drawn route and unticks POIs; nothing is deleted.
 $("map-clear").onclick = () => {
   clearShownRoute();
   state.selected = [];
   state.selectedRoutes = [];
-  renderPois();
-  renderRoutes();
-  renderMarkers();
+  renderSelection();
 };
 
 $("plan-create").onclick = () =>
@@ -1232,12 +1601,14 @@ $("gpx-import").onclick = () =>
     const input = $<HTMLInputElement>("gpx-file");
     const file = input.files?.[0];
     if (!file) {
-      notify("Choose a .gpx file first.");
+      notify("Choose a .gpx or rally .csv file first.");
       return;
     }
-    const summary = await api.importGpx(file);
+    // A .csv is a rally bonus list (code, lat, lon, points, state); anything else is read as GPX.
+    const rally = file.name.toLowerCase().endsWith(".csv");
+    const message = rally ? rallyImportMessage(await api.importRally(file)) : importMessage(await api.importGpx(file));
     input.value = "";
-    notify(importMessage(summary));
+    notify(message);
     await refresh();
   });
 

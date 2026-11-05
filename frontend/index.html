@@ -9,16 +9,48 @@
     <header id="app-header">
       <span class="brand">route-camp</span>
       <span class="tagline">Bonuses, routes and plans on real roads. Export to Garmin as GPX.</span>
+      <nav class="view-tabs" aria-label="View">
+        <button id="view-map" data-view="map" aria-pressed="true">Map</button>
+        <button id="view-bonuses" data-view="bonuses" aria-pressed="false">Bonuses</button>
+      </nav>
     </header>
     <div id="app">
       <aside id="sidebar">
         <section class="card">
           <h2>Import</h2>
-          <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" />
+          <label class="field"><span>GPX or rally CSV <small>a .gpx file, or bonus-lat-lon-points.csv (code, lat, lon, points, state)</small></span>
+            <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml,.csv,text/csv" />
+          </label>
           <div class="actions">
-            <button id="gpx-import" class="primary">Import GPX</button>
+            <button id="gpx-import" class="primary">Import</button>
           </div>
         </section>
+
+        <div id="selected-slot">
+          <section class="card" id="selected-card">
+            <h2>Selected <span id="selected-count" class="meta"></span></h2>
+            <p class="hint">Tick bonuses on the map, in the POI list or in the Bonuses table. Drag ⠿ (or use ↑ ↓) to set the order. A route made here keeps exactly this order.</p>
+            <ol id="selected-list"></ol>
+            <p id="selected-total" class="status"></p>
+            <label class="field"><span>Route name</span>
+              <input id="route-name" placeholder="e.g. Day 1" />
+            </label>
+            <label class="field"><span>Profile <small>fun avoids motorways and trunk roads</small></span>
+              <select id="route-profile">
+                <option value="car">car</option>
+                <option value="fun">fun</option>
+              </select>
+            </label>
+            <div class="actions">
+              <button id="route-create" class="primary" title="Make a route through the selected bonuses in this order and calculate its line">Create route in this order</button>
+              <button id="selected-clear" title="Untick every selected bonus (nothing is deleted)">Clear selection</button>
+            </div>
+            <div class="row append-row">
+              <select id="append-route" title="An existing route to add the selection to"></select>
+              <button id="append-selected" title="Add the selection to the end of that route, in this order, skipping stops it already has">Append</button>
+            </div>
+          </section>
+        </div>
 
         <section class="card">
           <h2><button class="section-toggle" data-section="pois" aria-expanded="true">POIs</button></h2>
@@ -29,22 +61,6 @@
               <input id="tag-input" placeholder="tag name" />
               <button id="tag-selected">Tag selected</button>
             </div>
-          </div>
-        </section>
-
-        <section class="card">
-          <h2>New route</h2>
-          <label class="field"><span>Name</span>
-            <input id="route-name" placeholder="route name" />
-          </label>
-          <label class="field"><span>Profile</span>
-            <select id="route-profile">
-              <option value="car">car</option>
-              <option value="fun">fun</option>
-            </select>
-          </label>
-          <div class="actions">
-            <button id="route-create" class="primary">Create from selected POIs (in tick order)</button>
           </div>
         </section>
 
@@ -89,6 +105,43 @@
           </label>
         </div>
       </div>
+      <main id="bonuses-view" hidden>
+        <div class="bonus-layout">
+          <section class="card bonus-card">
+            <h1>Bonuses</h1>
+            <p id="bonus-total" class="status"></p>
+            <div class="bonus-filters">
+              <label class="field"><span>Filter <small>code, name, state, tag or notes</small></span>
+                <input id="bonus-filter" type="search" placeholder="e.g. GA or prim1" />
+              </label>
+              <label class="field"><span>Tag</span>
+                <select id="bonus-tag"></select>
+              </label>
+              <div class="actions">
+                <button id="bonus-tick-shown" title="Tick every bonus the filter shows, after the ones already selected">Tick shown</button>
+                <button id="bonus-untick-shown" title="Untick every bonus the filter shows">Untick shown</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="bonus-table" class="sortable">
+                <thead>
+                  <tr>
+                    <th class="tick" aria-label="Selected"></th>
+                    <th data-sort="name">Code / name</th>
+                    <th data-sort="score" class="num">Points</th>
+                    <th data-sort="state">State</th>
+                    <th data-sort="tags">Tags</th>
+                    <th data-sort="routes" class="num">Routes</th>
+                    <th data-sort="notes">Notes</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+          <div id="bonus-side"></div>
+        </div>
+      </main>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
