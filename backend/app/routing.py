@@ -26,14 +26,7 @@ class GraphHopperClient:
 
     def route(self, points: list[list[float]], profile: str) -> RouteResult:
         """points are [lon, lat] in visiting order."""
-        body = {
-            "points": points,
-            "profile": profile,
-            "points_encoded": False,
-            "instructions": False,
-            "calc_points": True,
-        }
-        path = self._post("/route", body)["paths"][0]
+        path = self._post_route(points, profile, calc_points=True)
         return RouteResult(
             geometry=path["points"]["coordinates"],
             distance_m=path["distance"],
@@ -41,10 +34,37 @@ class GraphHopperClient:
         )
 
     def matrix(self, points: list[list[float]], profile: str) -> list[list[float]]:
-        """Travel time in seconds between every pair of points. Unreachable pairs come back as inf."""
-        body = {"from_points": points, "to_points": points, "profile": profile, "out_arrays": ["times"]}
-        times = self._post("/matrix", body)["times"]
-        return [[math.inf if value is None else value for value in row] for row in times]
+        """Travel time in seconds between every pair of points (inf where no route exists).
+
+        The GraphHopper build used here has no /matrix endpoint, so this makes one /route call per pair.
+        That is O(n^2) requests, fine for the stop counts of a single trip.
+        TODO: use GraphHopper's matrix API once the server exposes it, to cut the request count.
+        """
+        n = len(points)
+        times = [[0.0 if i == j else math.inf for j in range(n)] for i in range(n)]
+        reachable = 0
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                try:
+                    times[i][j] = self._post_route([points[i], points[j]], profile, calc_points=False)["time"] / 1000.0
+                    reachable += 1
+                except RoutingError:
+                    pass  # stays inf: that leg cannot be driven
+        if n > 1 and reachable == 0:
+            raise RoutingError("GraphHopper found no drivable legs between the stops")
+        return times
+
+    def _post_route(self, points: list[list[float]], profile: str, calc_points: bool) -> dict:
+        body = {
+            "points": points,
+            "profile": profile,
+            "points_encoded": False,
+            "instructions": False,
+            "calc_points": calc_points,
+        }
+        return self._post("/route", body)["paths"][0]
 
     def _post(self, path: str, body: dict) -> dict:
         try:
