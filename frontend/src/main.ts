@@ -169,13 +169,15 @@ type LabelMode = "both" | "name" | "score" | "none";
 const LABEL_KEY = "route-camp.labels";
 const LABEL_MODES: LabelMode[] = ["both", "name", "score", "none"];
 const LABEL_MIN_ZOOM = 9;
+// Name only by default: imported rally POI names already end in their score ("TALU 669").
+const DEFAULT_LABEL_MODE: LabelMode = "name";
 
 function loadLabelMode(): LabelMode {
   try {
     const stored = localStorage.getItem(LABEL_KEY);
-    return LABEL_MODES.find((mode) => mode === stored) ?? "both";
+    return LABEL_MODES.find((mode) => mode === stored) ?? DEFAULT_LABEL_MODE;
   } catch {
-    return "both";
+    return DEFAULT_LABEL_MODE;
   }
 }
 
@@ -690,7 +692,7 @@ async function refresh(): Promise<void> {
 const labelSelect = $<HTMLSelectElement>("label-mode");
 labelSelect.value = labelMode;
 labelSelect.onchange = () => {
-  labelMode = LABEL_MODES.find((mode) => mode === labelSelect.value) ?? "both";
+  labelMode = LABEL_MODES.find((mode) => mode === labelSelect.value) ?? DEFAULT_LABEL_MODE;
   try {
     localStorage.setItem(LABEL_KEY, labelMode);
   } catch {

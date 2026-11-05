@@ -234,8 +234,8 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
 - **POIs:** markers on the map (18 px, white ring; ticked POIs are filled with the accent colour); click
   the map to add a POI (asks for a name); tick POIs in a folder (tick order is route order); click a name
   to fly to it; tag the ticked POIs; delete.
-- **Map labels:** a "Map labels" control at the top right of the map chooses name, score, both (the
-  default) or none, stored in `localStorage` under `route-camp.labels`. Labels are DOM elements inside
+- **Map labels:** a "Map labels" control at the top right of the map chooses name (the default,
+  since imported names already end in their score), score, both or none, stored in `localStorage` under `route-camp.labels`. Labels are DOM elements inside
   each marker, shown from zoom 9 (`LABEL_MIN_ZOOM`); a white text halo keeps them legible on the basemap.
   Labels do not collide-check: dense clusters overlap at zoom 9–10.
   A MapLibre symbol layer was tried first and stalled the basemap style in the browser pane, so it was
