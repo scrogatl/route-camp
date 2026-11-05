@@ -61,14 +61,20 @@ const map = new maplibregl.Map({
   center: [-83.6, 32.9], // Georgia, USA; the default region
   zoom: 6,
 });
-await new Promise<void>((resolve) => map.once("load", () => resolve()));
-map.addSource("route", { type: "geojson", data: emptyLine });
-map.addLayer({
-  id: "route-line",
-  type: "line",
-  source: "route",
-  layout: { "line-join": "round", "line-cap": "round" },
-  paint: { "line-color": "#d9480f", "line-width": 4 },
+// The route layer is added once the style is ready. Not awaited, so a slow or failing basemap
+// style never blocks the sidebar and markers.
+let pendingRoute: Route | null = null;
+
+map.on("style.load", () => {
+  map.addSource("route", { type: "geojson", data: emptyLine });
+  map.addLayer({
+    id: "route-line",
+    type: "line",
+    source: "route",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#d9480f", "line-width": 4 },
+  });
+  if (pendingRoute) showRoute(pendingRoute);
 });
 
 let markers: maplibregl.Marker[] = [];
@@ -99,14 +105,20 @@ map.on("click", (event) =>
 
 function showRoute(route: Route): void {
   state.shownRouteId = route.id;
-  const source = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
   const summary = $("route-summary");
+  const source = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
+  if (!source) {
+    pendingRoute = route; // drawn by the style.load handler
+    summary.textContent = `${route.name}: map is still loading.`;
+    return;
+  }
+  pendingRoute = null;
   if (!route.geometry || route.geometry.length === 0 || route.distance_m == null || route.time_s == null) {
-    source?.setData(emptyLine);
+    source.setData(emptyLine);
     summary.textContent = `${route.name}: not calculated yet.`;
     return;
   }
-  source?.setData({
+  source.setData({
     type: "Feature",
     properties: {},
     geometry: { type: "LineString", coordinates: route.geometry },

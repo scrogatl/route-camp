@@ -49,6 +49,7 @@ body {
 button, input, select { font: inherit; margin: 2px 0; }
 button { cursor: pointer; padding: 3px 8px; }
 input, select { width: 100%; padding: 3px 6px; }
+input[type="checkbox"], input[type="file"] { width: auto; padding: 0; }
 label { display: block; margin: 6px 0; }
 .row { display: flex; gap: 6px; }
 .row input { flex: 1; }
