@@ -57,17 +57,11 @@ services:
     depends_on:
       - graphhopper
 
+  # Production: static bundle served by nginx, which proxies /api to the backend.
+  # For the Vite dev server with hot reload, add docker-compose.dev.yml (see README).
   frontend:
     build: ./frontend
-    environment:
-      BACKEND_URL: http://backend:8000
-    volumes:
-      - ./frontend:/srv
-      - frontend-node-modules:/srv/node_modules
     ports:
-      - "${FRONTEND_PORT:-5173}:5173"
+      - "${FRONTEND_PORT:-5173}:80"
     depends_on:
       - backend
-
-volumes:
-  frontend-node-modules:

@@ -1,0 +1,16 @@
+# Development override: the Vite dev server with hot reload, instead of the nginx production build.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+services:
+  frontend:
+    build:
+      dockerfile: Dockerfile.dev
+    environment:
+      BACKEND_URL: http://backend:8000
+    volumes:
+      - ./frontend:/srv
+      - frontend-node-modules:/srv/node_modules
+    ports: !override
+      - "${FRONTEND_PORT:-5173}:5173"
+
+volumes:
+  frontend-node-modules:
