@@ -438,6 +438,13 @@ ol.route-stops { user-select: none; }
 ol.route-stops li.dragging { background: var(--accent-soft); outline: 1px dashed var(--accent); }
 ol.route-stops li button:not(.position) { padding: 0 6px; margin: 0; }
 
+/* Minutes at a stop: muted on the default, bold orange when the bonus has its own. */
+button.stop-minutes { background: none; border: 0; margin: 0; padding: 0 4px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+button.stop-minutes:hover { background: none; color: var(--accent); text-decoration: underline; }
+button.stop-minutes.own { color: var(--orange); font-weight: 700; }
+ol.route-stops li button.stop-minutes { padding: 0 4px; }
+.stop-default input { width: 6em; }
+
 /* Typed or pasted list of bonuses, in the Selected card. */
 #paste-list { margin: 6px 0; }
 #paste-list > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; }

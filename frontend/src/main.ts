@@ -75,18 +75,53 @@ function formatDuration(seconds: number): string {
 
 const formatKm = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
 
+// Total time with the stop part, e.g. "10 h 49 min (1 h 20 min at stops)". Drive time alone when no stop time.
+function formatTotal(driveSeconds: number, stopSeconds: number): string {
+  if (stopSeconds <= 0) return formatDuration(driveSeconds);
+  return `${formatDuration(driveSeconds + stopSeconds)} (${formatDuration(stopSeconds)} at stops)`;
+}
+
+// The longer form for a single route: "9 h 29 min driving + 1 h 20 min at 16 stops = 10 h 49 min".
+function timeBreakdown(route: Route): string {
+  if (route.time_s == null) return "";
+  const counted = countedStops(route.poi_ids);
+  if (route.stop_s <= 0) return `${formatDuration(route.time_s)} driving`;
+  return `${formatDuration(route.time_s)} driving + ${formatDuration(route.stop_s)} at ${counted} stop${counted === 1 ? "" : "s"} = ${formatDuration(route.time_s + route.stop_s)}`;
+}
+
+// Default minutes at each stop (from /api/settings). A POI's own stop_minutes overrides it.
+let defaultStopMinutes = 5;
+
+// Minutes at one stop, as the backend counts them (app/stop_time.py): the POI's own minutes, else the
+// default, except the first and last stops (Rally HQ), which count only with their own minutes.
+function stopMinutesAt(poiIds: number[], index: number): number {
+  const poi = state.pois.find((p) => p.id === poiIds[index]);
+  if (poi?.stop_minutes != null) return poi.stop_minutes;
+  return index === 0 || index === poiIds.length - 1 ? 0 : defaultStopMinutes;
+}
+
+function countedStops(poiIds: number[]): number {
+  return poiIds.filter((_, index) => stopMinutesAt(poiIds, index) > 0).length;
+}
+
+function stopSecondsFor(poiIds: number[]): number {
+  return 60 * poiIds.reduce((sum, _, index) => sum + stopMinutesAt(poiIds, index), 0);
+}
+
+const formatMinutes = (minutes: number): string => `${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)} min`;
+
 // Route row summary: distance, driving time and stop count. Imported GPX tracks have no time until calculated.
 function routeStats(route: Route): string {
   const stops = `${route.poi_ids.length} stop${route.poi_ids.length === 1 ? "" : "s"}`;
   if (route.distance_m == null) return `${stops}, not calculated`;
-  const time = route.time_s == null ? "no time (GPX track)" : formatDuration(route.time_s);
+  const time = route.time_s == null ? "no time (GPX track)" : formatTotal(route.time_s, route.stop_s);
   return `${formatKm(route.distance_m)} · ${time} · ${stops}`;
 }
 
 function routeSummary(route: Route): string {
   if (route.distance_m == null || !route.geometry) return `${route.name}: not calculated yet.`;
   const origin = route.geometry_source === "imported" ? "GPX track" : route.profile;
-  const time = route.time_s == null ? "no time" : formatDuration(route.time_s);
+  const time = route.time_s == null ? "no time" : timeBreakdown(route);
   return `${route.name} (${origin}): ${formatKm(route.distance_m)}, ${time}`;
 }
 
@@ -107,7 +142,7 @@ function planTotals(plan: Plan): string {
   if (plan.routes_with_time === 0) {
     parts.push("no time");
   } else {
-    parts.push(formatDuration(plan.time_s) + (plan.routes_with_time < plan.routes_total ? " (partial)" : ""));
+    parts.push(formatTotal(plan.time_s, plan.stop_s) + (plan.routes_with_time < plan.routes_total ? " (partial)" : ""));
   }
   const missing = plan.routes_total - plan.routes_with_distance;
   if (missing > 0) parts.push(`${missing} not calculated`);
@@ -505,6 +540,37 @@ async function editScore(poi: POI): Promise<void> {
   await refresh();
 }
 
+// Sets a POI's own minutes at the stop, used in every route it is on. Blank goes back to the default.
+async function editStopMinutes(poi: POI): Promise<void> {
+  const input = await askText(
+    `Minutes at "${poi.name}"? Blank uses the default (${formatMinutes(defaultStopMinutes)}).`,
+    poi.stop_minutes == null ? "" : String(poi.stop_minutes),
+  );
+  if (input === null) return;
+  const text = input.trim();
+  const minutes = Number(text);
+  if (text !== "" && !(Number.isFinite(minutes) && minutes >= 0 && minutes <= 1440)) {
+    notify("Minutes at a stop is a number from 0 to 1440.");
+    return;
+  }
+  await api.updatePoi(poi.id, { stop_minutes: text === "" ? null : minutes });
+  await refresh();
+}
+
+// "⏱ 5" for a POI on the default, "⏱ 20" in bold for one with its own minutes; click to change.
+function stopMinutesButton(poi: POI, minutes = poi.stop_minutes ?? defaultStopMinutes): HTMLElement {
+  const own = poi.stop_minutes != null;
+  return h("button", {
+    className: own ? "stop-minutes own" : "stop-minutes",
+    title: own
+      ? `${formatMinutes(poi.stop_minutes!)} at ${poi.name} (its own). Click to change; blank goes back to the default.`
+      : minutes === defaultStopMinutes
+        ? `${formatMinutes(minutes)} at ${poi.name} (the default). Click to give it its own minutes.`
+        : `No stop time at ${poi.name}: the first and last stops count only with their own minutes. Click to set them.`,
+    onclick: () => run(() => editStopMinutes(poi)),
+  }, `⏱ ${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)}`);
+}
+
 function renderPoiItem(poi: POI): HTMLElement {
   return h(
     "li",
@@ -707,7 +773,9 @@ function selectedPois(): POI[] {
 function selectionTotals(): string {
   const pois = selectedPois();
   const points = pois.reduce((sum, poi) => sum + (poi.score ?? 0), 0);
-  return `${pois.length} selected · ${formatPoints(points)} points`;
+  const stopSeconds = stopSecondsFor(state.selected);
+  const stops = stopSeconds > 0 ? ` · ${formatDuration(stopSeconds)} at stops` : "";
+  return `${pois.length} selected · ${formatPoints(points)} points${stops}`;
 }
 
 function setSelectedOrder(ids: number[]): void {
@@ -985,15 +1053,15 @@ async function appendSelectionToRoute(): Promise<void> {
 
 // --- Bonuses table ----------------------------------------------------------
 
-type SortKey = "name" | "score" | "state" | "tags" | "routes" | "notes";
+type SortKey = "name" | "score" | "state" | "stop" | "tags" | "routes" | "notes";
 const SORT_KEY = "route-camp.bonus-sort";
-const NUMERIC_SORT: SortKey[] = ["score", "routes"];
+const NUMERIC_SORT: SortKey[] = ["score", "stop", "routes"];
 const UNTAGGED_FILTER = "\u0000untagged"; // the Tag filter's "Untagged" option; no tag can be named this
 
 function loadSort(): { key: SortKey; descending: boolean } {
   try {
     const saved = JSON.parse(localStorage.getItem(SORT_KEY) ?? "null") as { key?: string; descending?: boolean } | null;
-    const keys: SortKey[] = ["name", "score", "state", "tags", "routes", "notes"];
+    const keys: SortKey[] = ["name", "score", "state", "stop", "tags", "routes", "notes"];
     const key = keys.find((k) => k === saved?.key);
     if (key) return { key, descending: Boolean(saved?.descending) };
   } catch {
@@ -1028,6 +1096,7 @@ function sortValue(poi: POI, key: SortKey, counts: Map<number, number>): string 
     case "score": return poi.score;
     case "routes": return counts.get(poi.id) ?? 0;
     case "state": return poi.state || null;
+    case "stop": return poi.stop_minutes;
     case "tags": return poi.tags.join(", ") || null;
     case "notes": return poi.notes || null;
     default: return poi.name;
@@ -1102,6 +1171,7 @@ function renderBonuses(): void {
         }, poi.name), ...(order ? [h("span", { className: "order-badge", title: `Number ${order} in the selection` }, String(order))] : [])),
         h("td", { className: "num" }, poi.score == null ? "" : formatPoints(poi.score)),
         h("td", {}, poi.state ?? ""),
+        h("td", { className: "num" }, stopMinutesButton(poi)),
         h("td", {}, ...poi.tags.map((tag) => h("span", { className: "tag-chip plain" }, tag))),
         h("td", { className: "num" }, String(counts.get(poi.id) ?? 0)),
         h("td", { className: "notes" }, poi.notes ?? ""),
@@ -1109,7 +1179,7 @@ function renderBonuses(): void {
     }),
   );
   if (!shown.length) {
-    body.append(h("tr", {}, h("td", { colSpan: 7, className: "hint" }, state.pois.length ? "No bonuses match the filter." : "No POIs yet. Import a rally CSV or a GPX file.")));
+    body.append(h("tr", {}, h("td", { colSpan: 8, className: "hint" }, state.pois.length ? "No bonuses match the filter." : "No POIs yet. Import a rally CSV or a GPX file.")));
   }
 }
 
@@ -1233,6 +1303,7 @@ function renderStops(route: Route): HTMLElement {
               onclick: () => map.flyTo({ center: [poi.lon, poi.lat], zoom: 12 }),
             }, poi.name)
           : h("span", { className: "name meta" }, "(deleted POI)"),
+        ...(poi ? [stopMinutesButton(poi, stopMinutesAt(route.poi_ids, index))] : []),
         h("button", { title: "Move stop up", disabled: index === 0, onclick: () => run(() => move(index, -1)) }, "↑"),
         h("button", { title: "Move stop down", disabled: index === last, onclick: () => run(() => move(index, 1)) }, "↓"),
         h("button", {
@@ -1588,7 +1659,12 @@ function renderPlans(): void {
 // --- Data loading -----------------------------------------------------------
 
 async function refresh(): Promise<void> {
-  const [pois, routes, plans] = await Promise.all([api.listPois(), api.listRoutes(), api.listPlans()]);
+  const [pois, routes, plans, settings] = await Promise.all([
+    api.listPois(), api.listRoutes(), api.listPlans(), api.settings(),
+  ]);
+  defaultStopMinutes = settings.stop_minutes;
+  const stopInput = $<HTMLInputElement>("stop-minutes");
+  if (document.activeElement !== stopInput) stopInput.value = String(defaultStopMinutes);
   state.pois = pois;
   state.routes = routes;
   state.plans = plans;
@@ -1602,6 +1678,19 @@ async function refresh(): Promise<void> {
 }
 
 // --- Wire up controls -------------------------------------------------------
+
+const stopMinutesInput = $<HTMLInputElement>("stop-minutes");
+stopMinutesInput.onchange = () =>
+  run(async () => {
+    const minutes = Number(stopMinutesInput.value);
+    if (stopMinutesInput.value.trim() === "" || !Number.isFinite(minutes) || minutes < 0 || minutes > 1440) {
+      stopMinutesInput.value = String(defaultStopMinutes);
+      notify("Minutes at each stop is a number from 0 to 1440.");
+      return;
+    }
+    await api.updateSettings({ stop_minutes: minutes });
+    await refresh();
+  });
 
 const labelSelect = $<HTMLSelectElement>("label-mode");
 labelSelect.value = labelMode;

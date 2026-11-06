@@ -62,13 +62,15 @@ Tables (see `backend/app/models.py`):
 
 - **tags**: `id`, `name` (unique). Names are normalised to trimmed lowercase.
 - **pois**: `id`, `name`, `lat`, `lon`, `notes?`, `score?` (integer), `state?` (text such as "GA", from a
-  rally CSV), `created_at`, `updated_at`.
+  rally CSV), `stop_minutes?` (its own minutes at the stop; null means the default), `created_at`, `updated_at`.
 - **routes**: `id`, `name`, `notes?`, `profile` (`car` | `fun`), cached line fields:
   `distance_m?`, `time_s?`, `geometry?` (JSON `[[lon, lat], ...]`), `geometry_source?`
   (`calculated` | `imported`), `calculated_at?`, timestamps.
 - **route_stops**: `route_id`, `poi_id`, `position`. The ordered POI references of a route.
   A POI may appear more than once in a route.
 - **plans**: `id`, `name`, `notes?`, timestamps.
+- **app_settings**: `key`, `value` (number). Holds `stop_minutes`, the default minutes at each stop
+  (5 when the row is missing).
 - **plan_routes**: `plan_id`, `route_id`, `position`. The ordered route references of a plan.
 - **poi_tags**, **route_tags**, **plan_tags**: many-to-many link tables.
 
@@ -99,7 +101,15 @@ All foreign keys use `ON DELETE CASCADE`. SQLite needs `PRAGMA foreign_keys=ON` 
   name, tags and notes are never changed. No match creates a POI named by the code, with points and
   state. A malformed line is a 422 naming the line. The response counts created, matched and updated
   (matched POIs whose points or state changed).
-- **Plan totals** add up `distance_m` and `time_s` over the plan's routes that have them, and report
+- **Stop time** (`backend/app/stop_time.py`): `time_s` is driving time only. Each route also reports
+  `stop_s`, the time at its stops, and `total_s` = `time_s` + `stop_s` (null without a driving time).
+  Every stop takes its POI's own `stop_minutes`, else the default (`app_settings.stop_minutes`). The
+  first and last stops are where the ride starts and ends (Rally HQ), so they count only with their own
+  minutes, as rally-route-finder counts them. A POI used twice in a route counts each time. Both are
+  computed when a route is read, so changing the default or a POI's minutes changes every route at once
+  and needs no recalculation.
+- **Plan totals** add up `distance_m` and `time_s` over the plan's routes that have them, plus `stop_s`
+  of the routes that have a driving time, with `total_s` = `time_s` + `stop_s`; they report
   how many routes have a distance or time, so the UI can say "partial".
 
 ### Schema changes
@@ -115,8 +125,9 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | Method and path | Purpose |
 |---|---|
 | `GET /config` | `{map_style_url, routing_profiles: ["car","fun"]}` for the frontend |
-| `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]`, `score` (0 or more, or null) and `state` accepted on create/update. PATCH with `score: null` clears it |
-| `GET /routes` · `POST /routes` · `GET/PATCH/DELETE /routes/{id}` | Route CRUD; body has `name`, `profile`, `poi_ids` (ordered), `tags` |
+| `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]`, `score` (0 or more, or null), `state` and `stop_minutes` (0 to 1440, or null) accepted on create/update. PATCH with `score: null` clears it; `stop_minutes: null` goes back to the default |
+| `GET /routes` · `POST /routes` · `GET/PATCH/DELETE /routes/{id}` | Route CRUD; body has `name`, `profile`, `poi_ids` (ordered), `tags`. Responses add `stop_s` and `total_s` |
+| `GET /settings` · `PATCH /settings` `{stop_minutes}` | The default minutes at each stop (0 to 1440) |
 | `POST /routes/{id}/calculate?replace_imported=` | GraphHopper line through the stops in order; caches geometry, distance, time. 422 if fewer than 2 stops, 502 if GraphHopper fails |
 | `POST /routes/{id}/optimize?replace_imported=` | Reorders stops for least travel time, first stop fixed, and saves it; returns `{route, source}` where source is `graphhopper`, `haversine` or `none` (under 3 stops). Clears the cached line |
 | `POST /routes/{id}/optimize-preview?replace_imported=` | The same ordering, saves nothing. Returns `{source, current, proposed, geometry}`: each of `current` and `proposed` is `{poi_ids, distance_m, time_s}` (totals null when GraphHopper cannot route that order), and `geometry` is the proposed line. The UI accepts by PATCHing `poi_ids` and then calling `calculate` |
@@ -237,13 +248,21 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   Bonuses table and the Selected card. `renderSelection()` redraws all of them after any change. A
   ticked marker shows its number in the selection, in orange (stops of a shown route keep their blue
   stop numbers).
-- **Bonuses table:** columns tick, code / name, points (`score`), state, tags, routes (how many routes
+- **Bonuses table:** columns tick, code / name, points (`score`), state, stop min, tags, routes (how many routes
   the POI is on), notes. Click a heading to sort, again to reverse; numbers sort highest first, text A to
   Z, blanks last (remembered under `route-camp.bonus-sort`). A filter box matches name, state, notes and
   tags; a Tag picker narrows to one tag or Untagged. The status line reads "12 selected · 6,480 points ·
   showing 139 of 139". The header tick box and **Tick shown** / **Untick shown** act on the rows shown;
   ticking appends after the current selection in the table's order. A ticked row is tinted and shows its
   order number. Clicking a name switches to the map and flies there.
+- **Stop time:** the Routes card has **Minutes at each stop**, the default for every stop (saved through
+  `PATCH /settings`). Each stop in a route's stop list, and each row of the Bonuses table, has a ⏱ button
+  with its minutes: muted on the default, bold orange when the bonus has its own. Clicking it asks for
+  the bonus's own minutes (blank goes back to the default); they apply in every route that uses it. A
+  route row reads "581.6 km · 10 h 49 min (1 h 20 min at stops) · 18 stops", the route summary
+  "9 h 29 min driving + 1 h 20 min at 16 stops = 10 h 49 min", plans add stop time the same way, and the
+  Selected card's total adds the selection's stop time. `stopMinutesAt()` in `main.ts` mirrors the
+  backend rule for the selection, which is not saved yet.
 - **Selected card:** the ticked bonuses in order, each with a ⠿ drag handle, its number, name, points,
   ↑ / ↓ and ×, and a points total. Dragging uses pointer events listened for on the window (not pointer
   capture: moving the row in the DOM drops the capture, which first lost every drag). **Create route in
@@ -383,11 +402,12 @@ Data lives in `./data` (git-ignored): `osm/` (extract), `graph-cache/` (GraphHop
 
 ## 8. Tests
 
-`backend/tests`, 54 tests, none need GraphHopper (it is faked): models and cascades, geometry
+`backend/tests`, 59 tests, none need GraphHopper (it is faked): models and cascades, geometry
 (haversine, simplification), GPX parse/build round trip, optimize, the REST API, plans API (totals,
 reorder, tags), track import and re-import de-duplication, shaping-point spacing, budget and round trip, and the
 rally CSV (parsing, header and bad lines, creating, matching "CODE" and "CODE points" names, no
-duplicates on re-import, names/tags/notes kept). There are no frontend tests; UI checks were
+duplicates on re-import, names/tags/notes kept), and stop time (the default and changing it, a POI's own
+minutes, first and last stops, plan totals). There are no frontend tests; UI checks were
 done by hand in a browser.
 
 ## 9. Known gaps and next steps
@@ -439,3 +459,4 @@ A sensible order, each step testable on its own:
 - November 2026: feasibility review, then first draft scaffolded by a Claude Haiku session; round 2
   added plans UI, track import, de-dup and the nginx build; then in-page dialogs and Clear map. Later
   the rally-route-finder look, the Bonuses table, the ordered Selected card and rally CSV import.
+  Then time at each stop: a default for all stops and a bonus's own minutes.

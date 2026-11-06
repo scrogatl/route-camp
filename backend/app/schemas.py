@@ -5,7 +5,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from sqlalchemy.orm import object_session
+
 from app.models import POI, Plan, Route
+from app.stop_time import default_stop_minutes, stop_seconds
 
 Profile = Literal["car", "fun"]
 ItemKind = Literal["poi", "route", "plan"]
@@ -21,6 +24,7 @@ class TagOut(BaseModel):
 
 
 Score = Field(default=None, ge=0, le=999_999_999)
+StopMinutes = Field(default=None, ge=0, le=24 * 60)
 
 
 class POIIn(BaseModel):
@@ -30,6 +34,7 @@ class POIIn(BaseModel):
     notes: str | None = None
     score: int | None = Score
     state: str | None = Field(default=None, max_length=40)
+    stop_minutes: float | None = StopMinutes
     tags: list[str] = []
 
 
@@ -40,6 +45,7 @@ class POIUpdate(BaseModel):
     notes: str | None = None
     score: int | None = Score  # an explicit null clears the score
     state: str | None = Field(default=None, max_length=40)
+    stop_minutes: float | None = StopMinutes  # an explicit null goes back to the default
     tags: list[str] | None = None
 
 
@@ -51,6 +57,7 @@ class POIOut(BaseModel):
     notes: str | None
     score: int | None
     state: str | None
+    stop_minutes: float | None
     tags: list[str]
     created_at: datetime
     updated_at: datetime
@@ -82,7 +89,9 @@ class RouteOut(BaseModel):
     profile: Profile
     poi_ids: list[int]
     distance_m: float | None
-    time_s: float | None
+    time_s: float | None  # driving time
+    stop_s: float  # time at the stops (not the first or last, unless they have their own minutes)
+    total_s: float | None  # driving plus stops; null without a driving time
     geometry: list[list[float]] | None
     geometry_source: Literal["calculated", "imported"] | None
     tags: list[str]
@@ -135,12 +144,25 @@ class PlanOut(BaseModel):
     tags: list[str]
     # Totals over the plan's routes. Routes without a calculated or imported line are left out of the sums.
     distance_m: float
-    time_s: float
+    time_s: float  # driving time
+    stop_s: float  # stop time of the routes that have a driving time
+    total_s: float
     routes_total: int
     routes_with_distance: int
     routes_with_time: int
     created_at: datetime
     updated_at: datetime
+
+
+# --- Settings ---------------------------------------------------------------
+
+
+class SettingsOut(BaseModel):
+    stop_minutes: float  # default minutes at each stop
+
+
+class SettingsUpdate(BaseModel):
+    stop_minutes: float | None = Field(default=None, ge=0, le=24 * 60)
 
 
 # --- Tags and GPX -----------------------------------------------------------
@@ -200,13 +222,22 @@ def poi_out(poi: POI) -> POIOut:
         notes=poi.notes,
         score=poi.score,
         state=poi.state,
+        stop_minutes=poi.stop_minutes,
         tags=[t.name for t in poi.tags],
         created_at=poi.created_at,
         updated_at=poi.updated_at,
     )
 
 
-def route_out(route: Route) -> RouteOut:
+def _default_minutes(item: Route | Plan) -> float:
+    session = object_session(item)
+    return default_stop_minutes(session) if session is not None else 0.0
+
+
+def route_out(route: Route, default_minutes: float | None = None) -> RouteOut:
+    if default_minutes is None:
+        default_minutes = _default_minutes(route)
+    stop_s = stop_seconds([s.poi for s in route.stops], default_minutes)
     return RouteOut(
         id=route.id,
         name=route.name,
@@ -215,6 +246,8 @@ def route_out(route: Route) -> RouteOut:
         poi_ids=[s.poi.id for s in route.stops],
         distance_m=route.distance_m,
         time_s=route.time_s,
+        stop_s=stop_s,
+        total_s=None if route.time_s is None else route.time_s + stop_s,
         geometry=route.geometry,
         geometry_source=route.geometry_source,
         tags=[t.name for t in route.tags],
@@ -227,6 +260,8 @@ def plan_out(plan: Plan) -> PlanOut:
     routes = [link.route for link in plan.route_links]
     distances = [r.distance_m for r in routes if r.distance_m is not None]
     times = [r.time_s for r in routes if r.time_s is not None]
+    default_minutes = _default_minutes(plan)
+    stops = [stop_seconds([s.poi for s in r.stops], default_minutes) for r in routes if r.time_s is not None]
     return PlanOut(
         id=plan.id,
         name=plan.name,
@@ -235,6 +270,8 @@ def plan_out(plan: Plan) -> PlanOut:
         tags=[t.name for t in plan.tags],
         distance_m=sum(distances),
         time_s=sum(times),
+        stop_s=sum(stops),
+        total_s=sum(times) + sum(stops),
         routes_total=len(routes),
         routes_with_distance=len(distances),
         routes_with_time=len(times),

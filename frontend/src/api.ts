@@ -10,6 +10,7 @@ export interface POI {
   notes: string | null;
   score: number | null;
   state: string | null; // e.g. "GA", from a rally CSV
+  stop_minutes: number | null; // minutes at this stop; null means the default
   tags: string[];
 }
 
@@ -20,7 +21,9 @@ export interface Route {
   profile: Profile;
   poi_ids: number[];
   distance_m: number | null;
-  time_s: number | null;
+  time_s: number | null; // driving time
+  stop_s: number; // time at the stops (not the first or last unless they have their own minutes)
+  total_s: number | null; // driving plus stops; null without a driving time
   geometry: LonLat[] | null;
   geometry_source: "calculated" | "imported" | null;
   tags: string[];
@@ -33,10 +36,16 @@ export interface Plan {
   route_ids: number[];
   tags: string[];
   distance_m: number;
-  time_s: number;
+  time_s: number; // driving time
+  stop_s: number;
+  total_s: number;
   routes_total: number;
   routes_with_distance: number;
   routes_with_time: number;
+}
+
+export interface AppSettings {
+  stop_minutes: number; // default minutes at each stop
 }
 
 export interface OrderSummary {
@@ -118,7 +127,9 @@ export const api = {
   listPois: () => request<POI[]>("/pois"),
   createPoi: (poi: { name: string; lat: number; lon: number; tags?: string[] }) =>
     request<POI>("/pois", send("POST", poi)),
-  updatePoi: (id: number, patch: Partial<Pick<POI, "score">>) => request<POI>(`/pois/${id}`, send("PATCH", patch)),
+  settings: () => request<AppSettings>("/settings"),
+  updateSettings: (patch: Partial<AppSettings>) => request<AppSettings>("/settings", send("PATCH", patch)),
+  updatePoi: (id: number, patch: Partial<Pick<POI, "score" | "stop_minutes">>) => request<POI>(`/pois/${id}`, send("PATCH", patch)),
   deletePoi: (id: number) => request<void>(`/pois/${id}`, send("DELETE")),
 
   listRoutes: () => request<Route[]>("/routes"),

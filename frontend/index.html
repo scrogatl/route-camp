@@ -77,6 +77,9 @@
         <section class="card">
           <h2><button class="section-toggle" data-section="routes" aria-expanded="true">Routes</button></h2>
           <div id="routes-body">
+            <label class="field stop-default"><span>Minutes at each stop <small>added to the driving time; set a bonus's own minutes with its ⏱ button. The first and last stops (Rally HQ) count only with their own minutes.</small></span>
+              <input id="stop-minutes" type="number" min="0" max="1440" step="1" inputmode="numeric" />
+            </label>
             <ul id="route-list"></ul>
             <div class="row">
               <input id="route-tag-input" placeholder="tag name" />
@@ -140,6 +143,7 @@
                     <th data-sort="name">Code / name</th>
                     <th data-sort="score" class="num">Points</th>
                     <th data-sort="state">State</th>
+                    <th data-sort="stop" class="num" title="Minutes at this stop">Stop min</th>
                     <th data-sort="tags">Tags</th>
                     <th data-sort="routes" class="num">Routes</th>
                     <th data-sort="notes">Notes</th>

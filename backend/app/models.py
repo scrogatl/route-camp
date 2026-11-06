@@ -40,6 +40,15 @@ route_tags = _tag_link("route_tags", "route_id", "routes")
 plan_tags = _tag_link("plan_tags", "plan_id", "plans")
 
 
+class AppSetting(Base):
+    """App-wide settings as key/value pairs, e.g. stop_minutes (the default minutes at each stop)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[float | None] = mapped_column(Float, default=None)
+
+
 class POI(Base):
     __tablename__ = "pois"
 
@@ -50,6 +59,8 @@ class POI(Base):
     notes: Mapped[str | None] = mapped_column(Text, default=None)
     score: Mapped[int | None] = mapped_column(Integer, default=None)
     state: Mapped[str | None] = mapped_column(String(40), default=None)  # e.g. "GA", from a rally CSV
+    # Minutes spent at this stop; null means the default (AppSetting "stop_minutes").
+    stop_minutes: Mapped[float | None] = mapped_column(Float, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
