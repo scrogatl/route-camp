@@ -292,9 +292,12 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   action runs (`run()` in `main.ts` calls `hideUndo()`). `showUndo()`/`hideUndo()` are in `dialogs.ts`.
 - **Scores:** each POI row shows its score and has a "score" button (askText; blank clears it; must be
   a whole number, 0 or more).
+- **POI folders start collapsed** on every page load, since there can be well over a hundred POIs;
+  opening one lasts for that page view only (`openPoiFolders` in `main.ts`). Their bulk actions work
+  while collapsed.
 - **Sections collapse:** the POIs, Routes and Plans headers toggle their body. Collapsed sections and
-  folders are remembered in `localStorage` under `route-camp.collapsed` (a list of keys such as
-  `section/pois` or `poi/<tag>`), wrapped in try/catch because storage can be unavailable.
+  route folders are remembered in `localStorage` under `route-camp.collapsed` (a list of keys such as
+  `section/pois` or `route/<tag>`; `poi/` keys from earlier versions are dropped on load), wrapped in try/catch because storage can be unavailable.
 - **POIs:** markers on the map (18 px, white ring; ticked POIs are orange and numbered by their place in the selection); click
   the map to add a POI (asks for a name); tick POIs in a folder (tick order is route order); click a name
   to fly to it; tag the ticked POIs; delete.

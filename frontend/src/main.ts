@@ -179,6 +179,25 @@ function setCollapsed(key: string, value: boolean): void {
   }
 }
 
+// POI folders start collapsed on every page load (there can be well over a hundred POIs); opening one lasts
+// for this page view only. Other folders and the sections keep their remembered state. Keys stored by
+// earlier versions for POI folders are dropped.
+const openPoiFolders = new Set<string>();
+const isPoiFolder = (key: string): boolean => key.startsWith("poi/");
+if ([...collapsed].some(isPoiFolder)) {
+  for (const key of [...collapsed].filter(isPoiFolder)) setCollapsed(key, false);
+}
+
+function isFolderCollapsed(key: string): boolean {
+  return isPoiFolder(key) ? !openPoiFolders.has(key) : collapsed.has(key);
+}
+
+function setFolderCollapsed(key: string, value: boolean): void {
+  if (!isPoiFolder(key)) setCollapsed(key, value);
+  else if (value) openPoiFolders.delete(key);
+  else openPoiFolders.add(key);
+}
+
 // --- Map --------------------------------------------------------------------
 
 const config = await api.config();
@@ -426,7 +445,7 @@ function renderFolders<T extends { id: number; name: string; tags: string[] }>(
   container.replaceChildren(
     ...tags.map((tag) => {
       const key = `${prefix}/${tag}`;
-      const isCollapsed = collapsed.has(key);
+      const isCollapsed = isFolderCollapsed(key);
       const list = (folders.get(tag) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
       return h(
         "li",
@@ -440,7 +459,7 @@ function renderFolders<T extends { id: number; name: string; tags: string[] }>(
               className: "folder-head",
               "aria-expanded": !isCollapsed,
               onclick: () => {
-                setCollapsed(key, !isCollapsed);
+                setFolderCollapsed(key, !isCollapsed);
                 rerender();
               },
             },
