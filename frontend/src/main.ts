@@ -73,7 +73,16 @@ function formatDuration(seconds: number): string {
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 
-const formatKm = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
+const formatMiles = (metres: number): string => `${(metres / 1609.344).toFixed(1)} mi`;
+
+const formatPoints = (points: number): string => points.toLocaleString("en-US");
+
+// Points for a set of stops. Each bonus counts once, so Rally HQ at both ends (or a bonus on two routes) isn't doubled.
+function pointsFor(poiIds: number[]): number {
+  return [...new Set(poiIds)].reduce((sum, id) => sum + (state.pois.find((p) => p.id === id)?.score ?? 0), 0);
+}
+
+const pointsText = (poiIds: number[]): string => `${formatPoints(pointsFor(poiIds))} points`;
 
 // Total time with the stop part, e.g. "10 h 49 min (1 h 20 min at stops)". Drive time alone when no stop time.
 function formatTotal(driveSeconds: number, stopSeconds: number): string {
@@ -113,22 +122,22 @@ const formatMinutes = (minutes: number): string => `${Number.isInteger(minutes) 
 // Route row summary: distance, driving time and stop count. Imported GPX tracks have no time until calculated.
 function routeStats(route: Route): string {
   const stops = `${route.poi_ids.length} stop${route.poi_ids.length === 1 ? "" : "s"}`;
-  if (route.distance_m == null) return `${stops}, not calculated`;
+  if (route.distance_m == null) return `${stops} · ${pointsText(route.poi_ids)}, not calculated`;
   const time = route.time_s == null ? "no time (GPX track)" : formatTotal(route.time_s, route.stop_s);
-  return `${formatKm(route.distance_m)} · ${time} · ${stops}`;
+  return `${formatMiles(route.distance_m)} · ${time} · ${stops} · ${pointsText(route.poi_ids)}`;
 }
 
 function routeSummary(route: Route): string {
   if (route.distance_m == null || !route.geometry) return `${route.name}: not calculated yet.`;
   const origin = route.geometry_source === "imported" ? "GPX track" : route.profile;
   const time = route.time_s == null ? "no time" : timeBreakdown(route);
-  return `${route.name} (${origin}): ${formatKm(route.distance_m)}, ${time}`;
+  return `${route.name} (${origin}): ${formatMiles(route.distance_m)}, ${time}, ${pointsText(route.poi_ids)}`;
 }
 
 function orderTotals(order: OrderSummary): string {
   if (order.distance_m == null) return "no distance (GraphHopper unavailable)";
   const time = order.time_s == null ? "no time" : formatDuration(order.time_s);
-  return `${formatKm(order.distance_m)}, ${time}`;
+  return `${formatMiles(order.distance_m)}, ${time}`;
 }
 
 // Replaces the route summary under the Routes section (text, or nodes for the plan legend).
@@ -138,7 +147,8 @@ function setSummary(...content: (Node | string)[]): void {
 
 function planTotals(plan: Plan): string {
   if (plan.routes_total === 0) return "no routes yet";
-  const parts = [formatKm(plan.distance_m)];
+  const poiIds = plan.route_ids.flatMap((id) => state.routes.find((r) => r.id === id)?.poi_ids ?? []);
+  const parts = [formatMiles(plan.distance_m), pointsText(poiIds)];
   if (plan.routes_with_time === 0) {
     parts.push("no time");
   } else {
@@ -761,8 +771,6 @@ function renderPois(): void {
 }
 
 // --- Selected: the ticked bonuses, in the order the route will take -------------
-
-const formatPoints = (points: number): string => points.toLocaleString("en-US");
 
 function selectedPois(): POI[] {
   return state.selected

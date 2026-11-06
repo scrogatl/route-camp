@@ -259,7 +259,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   `PATCH /settings`). Each stop in a route's stop list, and each row of the Bonuses table, has a ⏱ button
   with its minutes: muted on the default, bold orange when the bonus has its own. Clicking it asks for
   the bonus's own minutes (blank goes back to the default); they apply in every route that uses it. A
-  route row reads "581.6 km · 10 h 49 min (1 h 20 min at stops) · 18 stops", the route summary
+  route row reads "361.4 mi · 10 h 49 min (1 h 20 min at stops) · 18 stops · 4,215 points", the route summary
   "9 h 29 min driving + 1 h 20 min at 16 stops = 10 h 49 min", plans add stop time the same way, and the
   Selected card's total adds the selection's stop time. `stopMinutesAt()` in `main.ts` mirrors the
   backend rule for the selection, which is not saved yet.
@@ -331,7 +331,9 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   fun) and makes a route from the folder's ticked POIs (in tick order) or, if none are ticked, all of its
   POIs. The stops keep that order, and the line is calculated in it straight away. Nothing reorders the
   stops. Fewer than two POIs is refused.
-- **Route rows** show distance, driving time and stop count ("534.3 km · 8 h 46 min · 16 stops"); an
+- **Route rows** show distance in miles, driving time, stop count and points ("332.0 mi · 8 h 46 min ·
+  16 stops · 3,870 points"); the route summary and plan totals show miles and points too. Points count
+  each bonus once (Rally HQ at both ends, or a bonus on two of a plan's routes, isn't doubled). An
   imported GPX track shows "no time" until calculated. Each route has a tick box; ticked routes can be
   tagged or untagged together with the tag field and **Tag selected** / **Untag** under the list.
   Clear map also unticks routes.
