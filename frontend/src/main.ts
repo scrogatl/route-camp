@@ -100,6 +100,8 @@ function timeBreakdown(route: Route): string {
 
 // Default minutes at each stop (from /api/settings). A POI's own stop_minutes overrides it.
 let defaultStopMinutes = 5;
+// Rally start, minutes after midnight (from /api/settings), for the route table's arrival times.
+let startMinutes = 8 * 60;
 
 // Minutes at one stop, as the backend counts them (app/stop_time.py): the POI's own minutes, else the
 // default, except the first and last stops (Rally HQ), which count only with their own minutes.
@@ -1005,6 +1007,117 @@ function revealRoute(routeId: number): void {
   setTimeout(() => row.classList.remove("just-added"), 2500);
 }
 
+// --- Route table: the stops with points, miles and arrival times -----------------
+
+// "07:45", or "00:15 +1d" past midnight.
+function formatClock(minutes: number): string {
+  const whole = Math.round(minutes);
+  const days = Math.floor(whole / 1440);
+  const inDay = whole - days * 1440;
+  const clock = `${String(Math.floor(inDay / 60)).padStart(2, "0")}:${String(inDay % 60).padStart(2, "0")}`;
+  return days > 0 ? `${clock} +${days}d` : clock;
+}
+
+const clockValue = (minutes: number): string => formatClock(minutes % 1440);
+
+let routeTableDialog: HTMLDialogElement | null = null;
+
+// Opens the table for a route (by id, so a later refresh shows the current stops). Arrival at each stop is
+// the start time plus the driving of the legs before it plus the minutes stopped at the stops before it.
+// The leg times are saved when the route is calculated, so the table opens without GraphHopper.
+function showRouteTable(routeId: number): void {
+  if (!routeTableDialog) {
+    routeTableDialog = document.createElement("dialog");
+    routeTableDialog.id = "route-table-dialog";
+    document.body.append(routeTableDialog);
+  }
+  renderRouteTable(routeId);
+  if (!routeTableDialog.open) routeTableDialog.showModal();
+}
+
+function renderRouteTable(routeId: number): void {
+  const box = routeTableDialog;
+  const route = state.routes.find((r) => r.id === routeId);
+  if (!box || !route) return;
+  const ids = route.poi_ids;
+  const legs = route.legs?.length === ids.length - 1 ? route.legs : null;
+  let clock = startMinutes;
+  let points = 0;
+  const counted = new Set<number>();
+  const rows = ids.map((id, index) => {
+    const poi = state.pois.find((p) => p.id === id);
+    const leg = index > 0 && legs ? legs[index - 1] : null;
+    if (leg) clock += leg.time_s / 60;
+    const arrive = index === 0 ? formatClock(startMinutes) : legs ? formatClock(clock) : "";
+    const stop = stopMinutesAt(ids, index);
+    clock += stop;
+    if (poi?.score != null && !counted.has(id)) {
+      counted.add(id);
+      points += poi.score;
+    }
+    return h(
+      "tr",
+      {},
+      h("td", { className: "num" }, String(index + 1)),
+      h("td", {}, poi?.name ?? "(deleted)"),
+      h("td", { className: "num" }, poi?.score == null ? "" : formatPoints(poi.score)),
+      h("td", { className: "num" }, formatPoints(points)),
+      h("td", { className: "num" }, leg ? (leg.distance_m / 1609.344).toFixed(1) : ""),
+      h("td", { className: "num" }, arrive),
+      h("td", { className: "num" }, stop > 0 ? formatMinutes(stop) : ""),
+    );
+  });
+  const startInput = h("input", {
+    type: "time",
+    value: clockValue(startMinutes),
+    onchange: () =>
+      run(async () => {
+        const [hours, minutes] = startInput.value.split(":").map(Number);
+        if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
+        startMinutes = hours * 60 + minutes;
+        renderRouteTable(routeId);
+        await api.updateSettings({ start_minutes: startMinutes });
+      }),
+  });
+  const note = legs
+    ? `Finish ${formatClock(clock)}. Arrival counts driving plus the minutes at earlier stops.`
+    : route.geometry_source === "imported"
+      ? "A GPX track has no time per leg: press calc on the route for arrival times."
+      : "Not calculated: press calc on the route for miles and arrival times.";
+  box.replaceChildren(
+    h("h2", {}, route.name),
+    h("p", { className: "meta" }, routeStats(route)),
+    h("label", { className: "start-time" }, "Start ", startInput),
+    h(
+      "div",
+      { className: "table-wrap" },
+      h(
+        "table",
+        { className: "route-table" },
+        h("thead", {}, h("tr", {}, ...["#", "Bonus", "Points", "Total", "Leg mi", "Arrive", "Stop"].map((label) => h("th", { className: label === "Bonus" ? "" : "num" }, label)))),
+        h("tbody", {}, ...rows),
+      ),
+    ),
+    h("p", { className: "hint" }, note),
+    h(
+      "div",
+      { className: "dialog-buttons no-print" },
+      h("button", { onclick: () => window.print() }, "Print"),
+      h("button", { className: "primary", onclick: () => box.close() }, "Close"),
+    ),
+  );
+}
+
+// Copies a route under a new name (asked for, "<name> (copy)" by default), then shows and reveals the copy.
+async function duplicate(route: Route): Promise<void> {
+  const name = (await askText("Name for the copy?", `${route.name} (copy)`))?.trim();
+  if (!name) return;
+  const copy = await api.duplicateRoute(route.id, name);
+  await refresh();
+  showRoute(copy);
+  revealRoute(copy.id);
+}
+
 // Creates the route through the selection in exactly its order, then calculates the line in that order.
 async function createRouteFromSelection(): Promise<void> {
   const nameInput = $<HTMLInputElement>("route-name");
@@ -1441,6 +1554,10 @@ function renderRouteItem(route: Route): HTMLElement {
         onclick: () => run(() => calculate(route)),
       }, stale ? "recalc" : "calc"),
       h("button", {
+        title: "Table of the stops: bonus, points, miles and arrival time, to print or keep open",
+        onclick: () => showRouteTable(route.id),
+      }, "table"),
+      h("button", {
         title: "Review a shorter stop order before saving it",
         onclick: () => run(() => optimize(route)),
       }, "optimize"),
@@ -1450,6 +1567,10 @@ function renderRouteItem(route: Route): HTMLElement {
         onclick: () => run(() => tagRouteStops(route)),
       }, "tag stops"),
       planPicker(route),
+      h("button", {
+        title: "Make a copy of this route (stops, tags and line) to change without losing the original",
+        onclick: () => run(() => duplicate(route)),
+      }, "duplicate"),
       h("button", {
         className: "danger",
         title: "Delete route",
@@ -1671,6 +1792,7 @@ async function refresh(): Promise<void> {
     api.listPois(), api.listRoutes(), api.listPlans(), api.settings(),
   ]);
   defaultStopMinutes = settings.stop_minutes;
+  startMinutes = settings.start_minutes;
   const stopInput = $<HTMLInputElement>("stop-minutes");
   if (document.activeElement !== stopInput) stopInput.value = String(defaultStopMinutes);
   state.pois = pois;

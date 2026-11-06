@@ -54,3 +54,12 @@ def test_calculate_refuses_to_overwrite_an_imported_track(client):
     # Explicit replacement gets past the guard. GraphHopper is unreachable in tests, so it fails later, with 502.
     assert client.post(f"/api/routes/{route_id}/calculate?replace_imported=true").status_code == 502
     assert routes(client)[0]["geometry_source"] == "imported"  # the failed calculate left the track alone
+
+
+def test_duplicate_keeps_an_imported_track(client):
+    import_gpx_bytes(client, gpx(trk("Ridge run", TRACK)))
+    original = routes(client)[0]
+    copy = client.post(f"/api/routes/{original['id']}/duplicate").json()
+    assert copy["geometry_source"] == "imported"
+    assert copy["geometry"] == original["geometry"]
+    assert copy["distance_m"] == original["distance_m"]

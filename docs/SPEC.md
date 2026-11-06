@@ -65,12 +65,13 @@ Tables (see `backend/app/models.py`):
   rally CSV), `stop_minutes?` (its own minutes at the stop; null means the default), `created_at`, `updated_at`.
 - **routes**: `id`, `name`, `notes?`, `profile` (`car` | `fun`), cached line fields:
   `distance_m?`, `time_s?`, `geometry?` (JSON `[[lon, lat], ...]`), `geometry_source?`
-  (`calculated` | `imported`), `calculated_at?`, timestamps.
+  (`calculated` | `imported`), `legs?` (JSON `[{distance_m, time_s}, ...]`, one per leg), `calculated_at?`, timestamps.
 - **route_stops**: `route_id`, `poi_id`, `position`. The ordered POI references of a route.
   A POI may appear more than once in a route.
 - **plans**: `id`, `name`, `notes?`, timestamps.
 - **app_settings**: `key`, `value` (number). Holds `stop_minutes`, the default minutes at each stop
-  (5 when the row is missing).
+  (5 when the row is missing), and `start_minutes`, the rally start in minutes after midnight (480 = 08:00
+  when missing).
 - **plan_routes**: `plan_id`, `route_id`, `position`. The ordered route references of a plan.
 - **poi_tags**, **route_tags**, **plan_tags**: many-to-many link tables.
 
@@ -127,8 +128,9 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | `GET /config` | `{map_style_url, routing_profiles: ["car","fun"]}` for the frontend |
 | `GET /pois?tag=` · `POST /pois` · `GET/PATCH/DELETE /pois/{id}` | POI CRUD; `tags: [names]`, `score` (0 or more, or null), `state` and `stop_minutes` (0 to 1440, or null) accepted on create/update. PATCH with `score: null` clears it; `stop_minutes: null` goes back to the default |
 | `GET /routes` · `POST /routes` · `GET/PATCH/DELETE /routes/{id}` | Route CRUD; body has `name`, `profile`, `poi_ids` (ordered), `tags`. Responses add `stop_s` and `total_s` |
-| `GET /settings` · `PATCH /settings` `{stop_minutes}` | The default minutes at each stop (0 to 1440) |
-| `POST /routes/{id}/calculate?replace_imported=` | GraphHopper line through the stops in order; caches geometry, distance, time. 422 if fewer than 2 stops, 502 if GraphHopper fails |
+| `GET /settings` · `PATCH /settings` `{stop_minutes, start_minutes}` | The default minutes at each stop (0 to 1440), and the rally start in minutes after midnight (0 to 1439, default 480 = 08:00) for the route table |
+| `POST /routes/{id}/duplicate` `{name?}` | Copies the route: stops, tags, profile, notes and cached line (an imported GPX track too). The copy is named `name`, or "<name> (copy)" without one. 201 with the new route |
+| `POST /routes/{id}/calculate?replace_imported=` | GraphHopper line through the stops in order; caches geometry, distance, time, and `legs` (`[{distance_m, time_s}]`, one per pair of consecutive stops, split at GraphHopper's via-point instructions). Anything that clears the line clears `legs`; an imported GPX track has none. 422 if fewer than 2 stops, 502 if GraphHopper fails |
 | `POST /routes/{id}/optimize?replace_imported=` | Reorders stops for least travel time, first stop fixed, and saves it; returns `{route, source}` where source is `graphhopper`, `haversine` or `none` (under 3 stops). Clears the cached line |
 | `POST /routes/{id}/optimize-preview?replace_imported=` | The same ordering, saves nothing. Returns `{source, current, proposed, geometry}`: each of `current` and `proposed` is `{poi_ids, distance_m, time_s}` (totals null when GraphHopper cannot route that order), and `geometry` is the proposed line. The UI accepts by PATCHing `poi_ids` and then calling `calculate` |
 | `PATCH /routes/{id}` `{poi_ids}` | Replaces the stops in order (used for moving, removing and accepting a proposed order). Clears the cached line |
@@ -344,7 +346,12 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   move them with ↑ / ↓ and recalc.
 - **Routes:** create from ticked POIs with a profile; per route: **show** / **hide** (a button; clicking
   the name also shows it), expand (▸) to list its stops, calc, optimize, GPX download, tags, add to plan
-  (a plan picker), delete. The shown route's row is highlighted and its button reads "hide". Showing a
+  (a plan picker), duplicate, delete, table. **table** opens the route table: each stop's number, bonus,
+  points, running points total, leg miles, arrival time and minutes stopped, plus the finish time. Arrival is
+  the **Start** time (in the table; saved as the `start_minutes` setting) plus the saved leg times and the
+  minutes at earlier stops, so it opens without GraphHopper. A route without leg times (not calculated, a GPX
+  track, or calculated before legs were saved) shows no arrivals until **calc**. **Print** prints the table alone. **duplicate** asks for a name ("<name> (copy)" by default), then
+  shows the copy and scrolls to it, so a route can be changed without losing the original. The shown route's row is highlighted and its button reads "hide". Showing a
   route draws its line, fits the map to it, and numbers its stops on the map in blue (a POI used twice
   shows "2,5"). **Clear map** hides the line, removes the stop numbers and unticks everything without
   deleting anything. Stop markers are 24 px, blue, numbered by position.

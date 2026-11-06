@@ -463,3 +463,26 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 /* A route just created or appended to flashes so its row is easy to spot. */
 @keyframes route-flash { from { background: color-mix(in srgb, var(--orange) 35%, transparent); } }
 li.route.just-added { animation: route-flash 2.5s ease-out; }
+
+/* Route table (showRouteTable): the stops of one route, printable on its own. */
+#route-table-dialog {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 20px;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+#route-table-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+#route-table-dialog h2 { margin: 0 0 4px; font-size: 18px; }
+#route-table-dialog .start-time { display: inline-flex; gap: 6px; align-items: center; margin: 6px 0 10px; }
+table.route-table td, table.route-table th { padding: 4px 8px; }
+
+@media print {
+  body > :not(#route-table-dialog) { display: none !important; }
+  #route-table-dialog { position: static; border: none; width: auto; max-height: none; padding: 0; color: #000; background: #fff; }
+  #route-table-dialog::backdrop { background: none; }
+  #route-table-dialog .no-print { display: none; }
+  table.route-table td, table.route-table th { border-bottom: 1px solid #ccc; }
+}

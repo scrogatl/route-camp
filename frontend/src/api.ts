@@ -14,6 +14,11 @@ export interface POI {
   tags: string[];
 }
 
+export interface RouteLeg {
+  distance_m: number;
+  time_s: number; // driving time
+}
+
 export interface Route {
   id: number;
   name: string;
@@ -26,6 +31,7 @@ export interface Route {
   total_s: number | null; // driving plus stops; null without a driving time
   geometry: LonLat[] | null;
   geometry_source: "calculated" | "imported" | null;
+  legs: RouteLeg[] | null; // one per pair of consecutive stops; null until calculated, or for a GPX track
   tags: string[];
 }
 
@@ -46,6 +52,7 @@ export interface Plan {
 
 export interface AppSettings {
   stop_minutes: number; // default minutes at each stop
+  start_minutes: number; // rally start, minutes after midnight
 }
 
 export interface OrderSummary {
@@ -137,6 +144,7 @@ export const api = {
     request<Route>("/routes", send("POST", route)),
   updateRoute: (id: number, patch: Partial<Pick<Route, "tags" | "poi_ids">>) =>
     request<Route>(`/routes/${id}`, send("PATCH", patch)),
+  duplicateRoute: (id: number, name: string) => request<Route>(`/routes/${id}/duplicate`, send("POST", { name })),
   deleteRoute: (id: number) => request<void>(`/routes/${id}`, send("DELETE")),
   calculateRoute: (id: number, replaceImported: boolean) =>
     request<Route>(`/routes/${id}/calculate?replace_imported=${replaceImported}`, send("POST")),

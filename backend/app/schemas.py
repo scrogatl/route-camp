@@ -74,12 +74,21 @@ class RouteIn(BaseModel):
     tags: list[str] = []
 
 
+class RouteDuplicate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class RouteUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     notes: str | None = None
     profile: Profile | None = None
     poi_ids: list[int] | None = None
     tags: list[str] | None = None
+
+
+class RouteLeg(BaseModel):
+    distance_m: float
+    time_s: float  # driving time
 
 
 class RouteOut(BaseModel):
@@ -94,6 +103,7 @@ class RouteOut(BaseModel):
     total_s: float | None  # driving plus stops; null without a driving time
     geometry: list[list[float]] | None
     geometry_source: Literal["calculated", "imported"] | None
+    legs: list[RouteLeg] | None  # per leg between consecutive stops; null until calculated, or for a GPX track
     tags: list[str]
     created_at: datetime
     updated_at: datetime
@@ -159,10 +169,12 @@ class PlanOut(BaseModel):
 
 class SettingsOut(BaseModel):
     stop_minutes: float  # default minutes at each stop
+    start_minutes: float  # rally start, minutes after midnight (for arrival times)
 
 
 class SettingsUpdate(BaseModel):
     stop_minutes: float | None = Field(default=None, ge=0, le=24 * 60)
+    start_minutes: float | None = Field(default=None, ge=0, lt=24 * 60)
 
 
 # --- Tags and GPX -----------------------------------------------------------
@@ -250,6 +262,7 @@ def route_out(route: Route, default_minutes: float | None = None) -> RouteOut:
         total_s=None if route.time_s is None else route.time_s + stop_s,
         geometry=route.geometry,
         geometry_source=route.geometry_source,
+        legs=route.legs,
         tags=[t.name for t in route.tags],
         created_at=route.created_at,
         updated_at=route.updated_at,

@@ -71,6 +71,9 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
 - **Routes**: tick POIs in the order you want to visit them, give the route a name, choose a profile
   (`car` = fastest, `fun` = curvy secondary roads, avoids motorways), and press "Create from selected POIs".
   Then press **calc** to route it. Click the route name to draw it and see distance and time.
+- **table**: the route's stops in a table with points, running points, leg miles and arrival times from a
+  start time you set there. It uses the leg times saved at **calc**, so it opens any time; **Print** prints it.
+- **duplicate**: copies a route (stops, tags and line) under a new name, to try changes without losing the original.
 - **optimize**: reorders a route's stops for the shortest travel time (first stop stays as start). Calculate again afterwards.
 - **Plans**: a plan is an ordered list of routes. Create one in the Plans section, then add routes with the
   dropdown and reorder them with ↑ and ↓. The totals sum the routes that have a distance, and the time total
@@ -119,7 +122,7 @@ All endpoints live under `/api`. Interactive docs are at `/docs` on the backend.
 
 - `GET|POST /pois`, `GET|PATCH|DELETE /pois/{id}`
 - `GET|POST /routes`, `GET|PATCH|DELETE /routes/{id}`
-- `POST /routes/{id}/calculate`, `POST /routes/{id}/optimize`, `GET /routes/{id}/gpx`
+- `POST /routes/{id}/duplicate`, `POST /routes/{id}/calculate`, `POST /routes/{id}/optimize`, `GET /routes/{id}/gpx`
 - `GET|POST /plans`, `GET|PATCH|DELETE /plans/{id}`
 - `GET|POST /tags`, `DELETE /tags/{id}`, `GET /tags/{id}/items`,
   `POST /tags/{id}/items` (body `{kind, id}`), `DELETE /tags/{id}/items/{kind}/{item_id}`

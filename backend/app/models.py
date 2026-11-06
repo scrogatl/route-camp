@@ -41,7 +41,8 @@ plan_tags = _tag_link("plan_tags", "plan_id", "plans")
 
 
 class AppSetting(Base):
-    """App-wide settings as key/value pairs, e.g. stop_minutes (the default minutes at each stop)."""
+    """App-wide settings as key/value pairs: stop_minutes (the default minutes at each stop) and
+    start_minutes (the rally start, minutes after midnight)."""
 
     __tablename__ = "app_settings"
 
@@ -81,6 +82,9 @@ class Route(Base):
     time_s: Mapped[float | None] = mapped_column(Float, default=None)
     geometry: Mapped[list | None] = mapped_column(JSON, default=None)  # [[lon, lat], ...]
     geometry_source: Mapped[str | None] = mapped_column(String(20), default=None)
+    # Driving distance and time of each leg, [{"distance_m", "time_s"}, ...], one per pair of consecutive
+    # stops. Only a calculated line has them; an imported track has none.
+    legs: Mapped[list | None] = mapped_column(JSON, default=None)
     calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -98,6 +102,7 @@ class Route(Base):
         self.time_s = None
         self.geometry = None
         self.geometry_source = None
+        self.legs = None
         self.calculated_at = None
 
 

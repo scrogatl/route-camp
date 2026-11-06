@@ -7,7 +7,7 @@ from app.database import get_session
 from app.models import Route, RouteStop, Tag, utcnow
 from app.optimize import best_order, haversine_time_matrix
 from app.routing import GraphHopperClient, RoutingError
-from app.schemas import OptimizeOut, OptimizePreviewOut, OrderSummary, RouteIn, RouteOut, RouteUpdate, route_out
+from app.schemas import OptimizeOut, OptimizePreviewOut, OrderSummary, RouteDuplicate, RouteIn, RouteOut, RouteUpdate, route_out
 from app.services import get_or_create_tags, set_route_stops
 
 router = APIRouter(prefix="/routes", tags=["routes"])
@@ -63,6 +63,30 @@ def update_route(route_id: int, payload: RouteUpdate, session: Session = Depends
     return route_out(route)
 
 
+@router.post("/{route_id}/duplicate", response_model=RouteOut, status_code=201)
+def duplicate_route(route_id: int, payload: RouteDuplicate | None = None, session: Session = Depends(get_session)):
+    """Copy a route: its stops, tags, profile, notes and cached line (an imported GPX track included).
+    Without a name the copy is called "<name> (copy)"."""
+    source = get_or_404(session, Route, route_id)
+    name = payload.name if payload and payload.name else f"{source.name[:193]} (copy)"
+    route = Route(
+        name=name,
+        notes=source.notes,
+        profile=source.profile,
+        distance_m=source.distance_m,
+        time_s=source.time_s,
+        geometry=source.geometry,
+        geometry_source=source.geometry_source,
+        legs=source.legs,
+        calculated_at=source.calculated_at,
+        stops=[RouteStop(poi=stop.poi, position=stop.position) for stop in source.stops],
+        tags=list(source.tags),
+    )
+    session.add(route)
+    session.commit()
+    return route_out(route)
+
+
 @router.delete("/{route_id}", status_code=204)
 def delete_route(route_id: int, session: Session = Depends(get_session)):
     session.delete(get_or_404(session, Route, route_id))
@@ -100,6 +124,7 @@ def calculate_route(
     route.geometry_source = "calculated"
     route.distance_m = result.distance_m
     route.time_s = result.time_s
+    route.legs = result.legs
     route.calculated_at = utcnow()
     session.commit()
     return route_out(route)

@@ -17,10 +17,17 @@ def _route(session, pois: list[POI], time_s: float | None = 3600) -> Route:
 
 
 def test_default_stop_minutes_is_five_and_can_be_changed(client):
-    assert client.get("/api/settings").json() == {"stop_minutes": 5}
-    assert client.patch("/api/settings", json={"stop_minutes": 8}).json() == {"stop_minutes": 8}
-    assert client.get("/api/settings").json() == {"stop_minutes": 8}
+    assert client.get("/api/settings").json()["stop_minutes"] == 5
+    assert client.patch("/api/settings", json={"stop_minutes": 8}).json()["stop_minutes"] == 8
+    assert client.get("/api/settings").json()["stop_minutes"] == 8
     assert client.patch("/api/settings", json={"stop_minutes": -1}).status_code == 422
+
+
+def test_start_time_defaults_to_eight_and_can_be_changed(client):
+    assert client.get("/api/settings").json() == {"stop_minutes": 5, "start_minutes": 480}
+    assert client.patch("/api/settings", json={"start_minutes": 390}).json() == {"stop_minutes": 5, "start_minutes": 390}
+    assert client.get("/api/settings").json()["start_minutes"] == 390
+    assert client.patch("/api/settings", json={"start_minutes": 1440}).status_code == 422
 
 
 def test_route_counts_middle_stops_at_the_default(client):

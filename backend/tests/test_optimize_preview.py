@@ -17,8 +17,9 @@ class FakeGraphHopper:
         if self.fail:
             raise RoutingError("down")
         pts = [(lat, lon) for lon, lat in points]
-        distance = sum(haversine_m(a, b) for a, b in zip(pts, pts[1:]))
-        return RouteResult(geometry=points, distance_m=distance, time_s=distance / 13.9)
+        legs = [{"distance_m": haversine_m(a, b), "time_s": haversine_m(a, b) / 13.9} for a, b in zip(pts, pts[1:])]
+        distance = sum(leg["distance_m"] for leg in legs)
+        return RouteResult(geometry=points, distance_m=distance, time_s=distance / 13.9, legs=legs)
 
     def matrix(self, points, profile):
         if self.fail:
@@ -111,3 +112,13 @@ def test_apply_optimize_still_saves_the_order(client):
 
     assert saved["route"]["poi_ids"] == [ids[0], ids[2], ids[3], ids[1]]
     assert routes(client)[0]["poi_ids"] == [ids[0], ids[2], ids[3], ids[1]]
+
+
+def test_calculate_saves_each_legs_time_and_optimize_clears_them(client):
+    client.app.state.graphhopper = FakeGraphHopper()
+    route, _ = _route_with_stops(client, LAT)
+    calculated = client.post(f"/api/routes/{route['id']}/calculate").json()
+    assert len(calculated["legs"]) == len(LAT) - 1
+    assert sum(leg["time_s"] for leg in calculated["legs"]) == calculated["time_s"]
+    assert client.post(f"/api/routes/{route['id']}/duplicate").json()["legs"] == calculated["legs"]
+    assert client.post(f"/api/routes/{route['id']}/optimize").json()["route"]["legs"] is None

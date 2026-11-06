@@ -15,6 +15,22 @@ class RouteResult:
     geometry: list[list[float]]  # [[lon, lat], ...]
     distance_m: float
     time_s: float
+    legs: list[dict]  # one {"distance_m", "time_s"} per pair of consecutive points
+
+
+# Instruction signs that end a leg: a via point reached, and the destination.
+_LEG_END_SIGNS = (5, 4)
+
+
+def split_legs(instructions: list[dict], points: int) -> list[dict]:
+    """Per-leg distance and time from GraphHopper's turn instructions, which mark each via point reached."""
+    legs = [{"distance_m": 0.0, "time_s": 0.0}]
+    for instruction in instructions:
+        legs[-1]["distance_m"] += instruction["distance"]
+        legs[-1]["time_s"] += instruction["time"] / 1000.0
+        if instruction["sign"] in _LEG_END_SIGNS and len(legs) < points - 1:
+            legs.append({"distance_m": 0.0, "time_s": 0.0})
+    return legs
 
 
 class GraphHopperClient:
@@ -26,11 +42,12 @@ class GraphHopperClient:
 
     def route(self, points: list[list[float]], profile: str) -> RouteResult:
         """points are [lon, lat] in visiting order."""
-        path = self._post_route(points, profile, calc_points=True)
+        path = self._post_route(points, profile, calc_points=True, instructions=True)
         return RouteResult(
             geometry=path["points"]["coordinates"],
             distance_m=path["distance"],
             time_s=path["time"] / 1000.0,
+            legs=split_legs(path.get("instructions", []), len(points)),
         )
 
     def matrix(self, points: list[list[float]], profile: str) -> list[list[float]]:
@@ -56,12 +73,12 @@ class GraphHopperClient:
             raise RoutingError("GraphHopper found no drivable legs between the stops")
         return times
 
-    def _post_route(self, points: list[list[float]], profile: str, calc_points: bool) -> dict:
+    def _post_route(self, points: list[list[float]], profile: str, calc_points: bool, instructions: bool = False) -> dict:
         body = {
             "points": points,
             "profile": profile,
             "points_encoded": False,
-            "instructions": False,
+            "instructions": instructions,
             "calc_points": calc_points,
         }
         return self._post("/route", body)["paths"][0]

@@ -31,6 +31,30 @@ def test_route_with_pois_and_tag_items(client):
     assert tagged["pois"] == []
 
 
+def test_duplicate_route_copies_stops_tags_and_line(client):
+    a = _make_poi(client, "A", 34.0, -84.0)
+    b = _make_poi(client, "B", 34.1, -84.1)
+    route = client.post(
+        "/api/routes", json={"name": "Loop", "profile": "fun", "poi_ids": [a["id"], b["id"], a["id"]], "tags": ["day1"]}
+    ).json()
+
+    copy = client.post(f"/api/routes/{route['id']}/duplicate")
+    assert copy.status_code == 201
+    copy = copy.json()
+    assert copy["id"] != route["id"]
+    assert copy["name"] == "Loop (copy)"
+    for field in ("profile", "poi_ids", "tags", "distance_m", "geometry", "geometry_source"):
+        assert copy[field] == route[field]
+
+    named = client.post(f"/api/routes/{route['id']}/duplicate", json={"name": "Loop B"}).json()
+    assert named["name"] == "Loop B"
+
+    # The copy is its own route: changing its stops leaves the original alone.
+    client.patch(f"/api/routes/{copy['id']}", json={"poi_ids": [b["id"]]})
+    assert client.get(f"/api/routes/{route['id']}").json()["poi_ids"] == [a["id"], b["id"], a["id"]]
+    assert client.post("/api/routes/999/duplicate").status_code == 404
+
+
 def test_unknown_poi_in_route_is_rejected(client):
     response = client.post("/api/routes", json={"name": "Bad", "poi_ids": [999]})
     assert response.status_code == 422
