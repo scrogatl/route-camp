@@ -314,7 +314,14 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   route draws its line, fits the map to it, and numbers its stops on the map in blue (a POI used twice
   shows "2,5"). **Clear map** hides the line, removes the stop numbers and unticks everything without
   deleting anything. Stop markers are 24 px, blue, numbered by position.
-- **Stops:** in an expanded route each stop has up, down and remove. Each change is saved at once and
+- **Moving stops:** drag a stop's ⠿ handle to any place in the list (the sidebar scrolls when the pointer
+  nears its top or bottom edge), or click its position number and type the new position. Either saves
+  the new order in one request. The Selected card has the same handle and position number. Rows are
+  keyed by position, since a POI can be a stop twice (`startDrag()`, `positionButton()`, `moveTo()`).
+- **Tag stops:** a route's **tag stops** button asks for a tag (the route's name by default) and adds it
+  to every POI on the route, once each. An Undo bar then offers to take it off again, only from the POIs
+  that did not already have it.
+- **Stops:** in an expanded route each stop has up, down and remove (×). Each change is saved at once and
   clears the line. The route then reads "order changed, recalc" and shows a **recalc** button, which
   calculates the line through the stops in the order the user set. Nothing reorders or recalculates on
   its own; optimize only runs when clicked, through the accept / reject review.
@@ -388,8 +395,8 @@ done by hand in a browser.
 - Optimize keeps the first stop fixed and has no return leg, time windows or scoring.
 - Accept saves the new order before it calculates the line. If GraphHopper fails at that second step the
   order is kept and the route has no line; calc again to retry.
-- Stop ordering is up/down buttons only. Ordering the POIs of a tag folder as a whole (drag, or a
-  "sequence" the folder keeps) is planned for later.
+- Ordering the POIs of a tag folder as a whole (a "sequence" the folder keeps) is not built; order is
+  set in the Selected card or on a route.
 - The plan view has no map of each plan's stops, and it draws only routes that have a line.
 - Rally features not ported from rally-route-finder yet: choosing the best set of bonuses within a time
   budget (its solvers), combos, bonus hours (open/close times), late penalties, slow zones, and its login.

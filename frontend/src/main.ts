@@ -695,15 +695,24 @@ function setSelectedOrder(ids: number[]): void {
   renderSelection();
 }
 
-// Drag the ⠿ handle to move a bonus (pointer events, so a mouse, pen or finger all work); ↑ / ↓ do the
-// same from the keyboard. Only the user's moves change the order.
+// Drag a ⠿ handle to move a row of an ordered list (the Selected card, a route's stops). Pointer events,
+// so a mouse, pen or finger all work; ↑ / ↓ and the position number do the same from the keyboard. Only
+// the user's moves change an order. On drop, onDrop gets the rows' data-key values in their new order.
 // Listens on the window, not with pointer capture: moving the row in the DOM would drop the capture.
-function startDrag(event: PointerEvent, item: HTMLElement): void {
+function startDrag(event: PointerEvent, item: HTMLElement, onDrop: (keys: string[]) => void): void {
   const list = item.parentElement as HTMLElement;
+  const before = [...list.children].map((el) => (el as HTMLElement).dataset.key ?? "");
+  // Near the top or bottom edge of the scrolling panel, scroll it so a row can go anywhere in a long list.
+  const scroller = item.closest<HTMLElement>("#sidebar, #bonuses-view");
   event.preventDefault();
   item.classList.add("dragging");
   document.body.classList.add("reordering");
   const move = (e: PointerEvent) => {
+    if (scroller) {
+      const edges = scroller.getBoundingClientRect();
+      if (e.clientY < edges.top + 40) scroller.scrollTop -= 12;
+      else if (e.clientY > edges.bottom - 40) scroller.scrollTop += 12;
+    }
     const target = [...list.children].find((el) => {
       if (el === item) return false;
       const box = el.getBoundingClientRect();
@@ -711,8 +720,8 @@ function startDrag(event: PointerEvent, item: HTMLElement): void {
     });
     if (!target) return;
     const box = target.getBoundingClientRect();
-    const before = e.clientY < box.top + box.height / 2 ? target : target.nextSibling;
-    if (before !== item && before !== item.nextSibling) list.insertBefore(item, before);
+    const next = e.clientY < box.top + box.height / 2 ? target : target.nextSibling;
+    if (next !== item && next !== item.nextSibling) list.insertBefore(item, next);
   };
   const end = () => {
     window.removeEventListener("pointermove", move);
@@ -720,12 +729,40 @@ function startDrag(event: PointerEvent, item: HTMLElement): void {
     window.removeEventListener("pointercancel", end);
     item.classList.remove("dragging");
     document.body.classList.remove("reordering");
-    const order = [...list.children].map((el) => Number((el as HTMLElement).dataset.id));
-    if (order.join() !== state.selected.join()) setSelectedOrder(order);
+    const keys = [...list.children].map((el) => (el as HTMLElement).dataset.key ?? "");
+    if (keys.join() !== before.join()) onDrop(keys);
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", end);
   window.addEventListener("pointercancel", end);
+}
+
+// Moves one item of an ordered list to another position (1-based), keeping the rest in order.
+function moveTo<T>(items: T[], from: number, to: number): T[] {
+  const result = [...items];
+  const [moved] = result.splice(from, 1);
+  result.splice(to, 0, moved);
+  return result;
+}
+
+// The position number of a row is a button: type a new position to jump there instead of pressing ↑ / ↓.
+function positionButton(index: number, count: number, name: string, apply: (to: number) => void | Promise<void>): HTMLElement {
+  return h("button", {
+    className: "stop-number position",
+    title: `Move ${name} to another position`,
+    "aria-label": `Position ${index + 1} of ${count}: ${name}. Move to another position`,
+    onclick: () =>
+      run(async () => {
+        const input = await askText(`Move "${name}" from ${index + 1} to which position (1 to ${count})?`, String(index + 1));
+        if (input === null) return;
+        const to = Number(input.trim());
+        if (!Number.isInteger(to) || to < 1 || to > count) {
+          notify(`A position is a whole number from 1 to ${count}.`);
+          return;
+        }
+        if (to !== index + 1) await apply(to - 1);
+      }),
+  }, String(index + 1));
 }
 
 function renderSelected(): void {
@@ -747,9 +784,10 @@ function renderSelected(): void {
           className: "drag-handle",
           title: "Drag to move",
           "aria-hidden": "true",
-          onpointerdown: (event: PointerEvent) => startDrag(event, item),
+          onpointerdown: (event: PointerEvent) =>
+            startDrag(event, item, (keys) => setSelectedOrder(keys.map(Number))),
         }, "⠿"),
-        h("span", { className: "stop-number" }, String(index + 1)),
+        positionButton(index, pois.length, poi.name, (to) => setSelectedOrder(moveTo(state.selected, index, to))),
         h("span", {
           className: "name",
           title: poi.name,
@@ -767,7 +805,7 @@ function renderSelected(): void {
           onclick: () => setSelectedOrder(state.selected.filter((id) => id !== poi.id)),
         }, "×"),
       );
-      item.dataset.id = String(poi.id);
+      item.dataset.key = String(poi.id);
       return item;
     }),
   );
@@ -1063,15 +1101,24 @@ function renderStops(route: Route): HTMLElement {
     [ids[index], ids[index + step]] = [ids[index + step], ids[index]];
     return setStops(route, ids);
   };
+  // Rows are keyed by position, since a POI can be a stop more than once.
+  const reorder = (keys: string[]) => run(() => setStops(route, keys.map((key) => route.poi_ids[Number(key)])));
   return h(
     "ol",
     { className: "route-stops" },
     ...route.poi_ids.map((poiId, index) => {
       const poi = state.pois.find((p) => p.id === poiId);
-      return h(
+      const name = poi?.name ?? "(deleted POI)";
+      const item: HTMLElement = h(
         "li",
         {},
-        h("span", { className: "stop-number" }, String(index + 1)),
+        h("span", {
+          className: "drag-handle",
+          title: "Drag to move this stop",
+          "aria-hidden": "true",
+          onpointerdown: (event: PointerEvent) => startDrag(event, item, reorder),
+        }, "⠿"),
+        positionButton(index, route.poi_ids.length, name, (to) => setStops(route, moveTo(route.poi_ids, index, to))),
         poi
           ? h("span", {
               className: "name",
@@ -1083,9 +1130,12 @@ function renderStops(route: Route): HTMLElement {
         h("button", { title: "Move stop down", disabled: index === last, onclick: () => run(() => move(index, 1)) }, "↓"),
         h("button", {
           title: "Remove this stop from the route",
+          "aria-label": `Remove stop ${index + 1}: ${name}`,
           onclick: () => run(() => setStops(route, route.poi_ids.filter((_, i) => i !== index))),
-        }, "remove"),
+        }, "×"),
       );
+      item.dataset.key = String(index);
+      return item;
     }),
   );
 }
@@ -1209,6 +1259,10 @@ function renderRouteItem(route: Route): HTMLElement {
         onclick: () => run(() => optimize(route)),
       }, "optimize"),
       h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
+      h("button", {
+        title: "Add a tag to every POI that is a stop of this route",
+        onclick: () => run(() => tagRouteStops(route)),
+      }, "tag stops"),
       planPicker(route),
       h("button", {
         className: "danger",
@@ -1227,9 +1281,37 @@ function renderRouteItem(route: Route): HTMLElement {
       ? [
           renderStops(route),
           renderAddStops(route),
-          h("p", { className: "hint stops-hint" }, "The stops stay in this order. After a change, press recalc to draw the line through them."),
+          h("p", { className: "hint stops-hint" }, "Drag ⠿ or click a stop's number to move it. The stops stay in this order; after a change, press recalc to draw the line through them."),
         ]
       : []),
+  );
+}
+
+// Tags every POI on the route (each once, however often it is a stop). Undo takes the tag off only the
+// POIs that did not already have it.
+async function tagRouteStops(route: Route): Promise<void> {
+  const pois = [...new Set(route.poi_ids)]
+    .map((id) => state.pois.find((poi) => poi.id === id))
+    .filter((poi): poi is POI => poi !== undefined);
+  if (!pois.length) {
+    notify(`"${route.name}" has no stops to tag.`);
+    return;
+  }
+  const name = (await askText(`Tag all ${pois.length} POIs on "${route.name}" with:`, route.name.toLowerCase()))?.trim().toLowerCase();
+  if (!name) return;
+  const added = pois.filter((poi) => !poi.tags.includes(name));
+  const tag = await api.createTag(name);
+  await forEachPoi(added, (poi) => api.tagItem(tag.id, "poi", poi.id));
+  await refresh();
+  const already = pois.length - added.length;
+  showUndo(
+    `Tagged ${added.length} POI${added.length === 1 ? "" : "s"} on "${route.name}" with "${name}"` +
+      (already ? ` (${already} already had it).` : "."),
+    () =>
+      run(async () => {
+        await forEachPoi(added, (poi) => api.untagItem(tag.id, "poi", poi.id));
+        await refresh();
+      }),
   );
 }
 
