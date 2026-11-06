@@ -45,7 +45,7 @@ function h<K extends keyof HTMLElementTagNameMap>(
   for (const [key, value] of Object.entries(props)) {
     if (key.startsWith("on") && typeof value === "function") {
       node.addEventListener(key.slice(2), value as EventListener);
-    } else if (key.startsWith("aria-")) {
+    } else if (key.startsWith("aria-") || key.startsWith("data-")) {
       node.setAttribute(key, String(value));
     } else {
       Reflect.set(node, key, value);
@@ -658,6 +658,7 @@ async function routeFromFolder(tag: string, pois: POI[]): Promise<void> {
   const calculated = await api.calculateRoute(route.id, false);
   await refresh();
   showRoute(calculated);
+  revealRoute(route.id);
 }
 
 // Puts a tag back on exactly these POIs (those still in the library), recreating the tag if it was deleted.
@@ -891,6 +892,24 @@ function applyBonusList(replace: boolean): void {
   }
 }
 
+// Brings a route's row into view in the sidebar: opens the Routes section and the route's folders if they
+// were collapsed, then scrolls to it. Used after creating or appending, since a new untagged route lands
+// in the last folder, far below the Selected card.
+function revealRoute(routeId: number): void {
+  const route = state.routes.find((r) => r.id === routeId);
+  if (!route) return;
+  setCollapsed("section/routes", false);
+  $("routes-body").hidden = false;
+  document.querySelector('.section-toggle[data-section="routes"]')?.setAttribute("aria-expanded", "true");
+  for (const tag of route.tags.length ? route.tags : [""]) setCollapsed(`route/${tag}`, false);
+  renderRoutes();
+  const row = document.querySelector<HTMLElement>(`li.route[data-route-id="${routeId}"]`);
+  if (!row) return;
+  row.scrollIntoView({ block: "center", behavior: "smooth" });
+  row.classList.add("just-added");
+  setTimeout(() => row.classList.remove("just-added"), 2500);
+}
+
 // Creates the route through the selection in exactly its order, then calculates the line in that order.
 async function createRouteFromSelection(): Promise<void> {
   const nameInput = $<HTMLInputElement>("route-name");
@@ -913,10 +932,12 @@ async function createRouteFromSelection(): Promise<void> {
     const calculated = await api.calculateRoute(route.id, false);
     await refresh();
     showRoute(calculated);
+    revealRoute(route.id);
   } catch (err) {
     // The route is saved either way; only its line is missing, and calc retries it.
     await refresh();
     showRoute(state.routes.find((r) => r.id === route.id) ?? route);
+    revealRoute(route.id);
     throw err;
   }
 }
@@ -940,6 +961,7 @@ async function appendSelectionToRoute(): Promise<void> {
   setView("map");
   await setStops(route, [...route.poi_ids, ...added]);
   showRoute(state.routes.find((r) => r.id === route.id) ?? route);
+  revealRoute(route.id);
 }
 
 // --- Bonuses table ----------------------------------------------------------
@@ -1270,7 +1292,7 @@ function renderRouteItem(route: Route): HTMLElement {
   };
   return h(
     "li",
-    { className: shown ? "route shown" : "route" },
+    { className: shown ? "route shown" : "route", "data-route-id": route.id },
     h(
       "div",
       { className: "route-head" },

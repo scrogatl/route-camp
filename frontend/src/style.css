@@ -452,3 +452,7 @@ textarea {
   color: var(--text);
 }
 textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+
+/* A route just created or appended to flashes so its row is easy to spot. */
+@keyframes route-flash { from { background: color-mix(in srgb, var(--orange) 35%, transparent); } }
+li.route.just-added { animation: route-flash 2.5s ease-out; }

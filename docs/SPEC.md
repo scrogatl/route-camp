@@ -250,8 +250,10 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   this order** needs a name and two bonuses; it creates the route with exactly that order and calculates
   the line in it (if GraphHopper fails, the route is kept without a line). **Append** adds the selection
   to the end of a picked route, in order, skipping stops it already has; like any stop change it clears
-  the line until recalc (and asks first on an imported track). Both clear the selection and show the
-  route on the map. Nothing in the card ever reorders; optimize stays a separate review on a route.
+  the line until recalc (and asks first on an imported track). Both clear the selection, show the
+  route on the map, and bring its row into view (`revealRoute()`: opens the Routes section and the
+  route's folders, scrolls to the row and flashes it). Without that, a new untagged route landed in the
+  last folder far below the Selected card, looked missing, and was created a second time. Nothing in the card ever reorders; optimize stays a separate review on a route.
 - **Type or paste a list:** a fold-out box in the Selected card takes bonus codes or POI names in route
   order. Pieces are split on new lines, commas, semicolons, tabs and arrows (→, ->); within a piece the
   words are matched greedily, longest run first, so "Rally HQ Warner Robins ABAC BLHD" on one line finds
