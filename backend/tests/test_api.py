@@ -49,6 +49,11 @@ def test_duplicate_route_copies_stops_tags_and_line(client):
     named = client.post(f"/api/routes/{route['id']}/duplicate", json={"name": "Loop B"}).json()
     assert named["name"] == "Loop B"
 
+    # Renaming keeps the stops and the line.
+    renamed = client.patch(f"/api/routes/{named['id']}", json={"name": "Loop C"}).json()
+    assert (renamed["name"], renamed["poi_ids"], renamed["geometry"]) == ("Loop C", named["poi_ids"], named["geometry"])
+    assert client.patch(f"/api/routes/{named['id']}", json={"name": ""}).status_code == 422
+
     # The copy is its own route: changing its stops leaves the original alone.
     client.patch(f"/api/routes/{copy['id']}", json={"poi_ids": [b["id"]]})
     assert client.get(f"/api/routes/{route['id']}").json()["poi_ids"] == [a["id"], b["id"], a["id"]]

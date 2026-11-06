@@ -142,7 +142,7 @@ export const api = {
   listRoutes: () => request<Route[]>("/routes"),
   createRoute: (route: { name: string; profile: Profile; poi_ids: number[] }) =>
     request<Route>("/routes", send("POST", route)),
-  updateRoute: (id: number, patch: Partial<Pick<Route, "tags" | "poi_ids">>) =>
+  updateRoute: (id: number, patch: Partial<Pick<Route, "name" | "tags" | "poi_ids">>) =>
     request<Route>(`/routes/${id}`, send("PATCH", patch)),
   duplicateRoute: (id: number, name: string) => request<Route>(`/routes/${id}/duplicate`, send("POST", { name })),
   deleteRoute: (id: number) => request<void>(`/routes/${id}`, send("DELETE")),

@@ -333,20 +333,31 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   fun) and makes a route from the folder's ticked POIs (in tick order) or, if none are ticked, all of its
   POIs. The stops keep that order, and the line is calculated in it straight away. Nothing reorders the
   stops. Fewer than two POIs is refused.
-- **Route rows** show distance in miles, driving time, stop count and points ("332.0 mi · 8 h 46 min ·
+- **Route rows** are one compact row each: a small tick box, then the name with its profile (or "track")
+  over a stats line: distance in miles, driving time, stop count and points ("332.0 mi · 8 h 46 min ·
   16 stops · 3,870 points"); the route summary and plan totals show miles and points too. Points count
   each bonus once (Rally HQ at both ends, or a bonus on two of a plan's routes, isn't doubled). An
-  imported GPX track shows "no time" until calculated. Each route has a tick box; ticked routes can be
-  tagged or untagged together with the tag field and **Tag selected** / **Untag** under the list.
-  Clear map also unticks routes.
+  imported GPX track shows "no time" until calculated. Clicking a row **selects** the route and draws it
+  on the map (`showRoute()`, which sets `state.activeRouteId`). The selected row is highlighted, in the
+  accent colour while it is drawn and in grey once hidden, and only it shows its tag chips and, when
+  opened, its stop list. The tick boxes stay faint until hovered or ticked. Ticked routes can be tagged or
+  untagged together with the tag field and **Tag selected** / **Untag** under the list. Clear map also
+  unticks routes; the selected route stays selected.
+- **Routes toolbar** (`renderRouteToolbar()`): sticky at the top of the Routes section, so it stays in view
+  while the list scrolls (on a phone it sticks to the top of the screen). It names the selected route and
+  holds every action for it: show / hide, stops (lists the stops), calc / recalc, optimize, table, GPX,
+  tag stops, add to plan (a plan picker), rename, duplicate, delete. With nothing selected the buttons are
+  disabled and it reads "Select a route below to act on it." After a stop change the toolbar title and the
+  row's stats line read "order changed, recalc" in orange, and calc becomes an orange **recalc**.
 - **Route tags** show as chips under the route: × removes one; **+ tag** adds one (or several, comma
   separated) and keeps the others.
-- **Adding stops to an existing route:** in the expanded stop list, "add a stop…" appends any POI, and
+- **Adding stops to an existing route:** in the selected route's stop list, "add a stop…" appends any POI, and
   **add ticked (N)** appends the ticked POIs in tick order, skipping ones already on the route. Then
   move them with ↑ / ↓ and recalc.
-- **Routes:** create from ticked POIs with a profile; per route: **show** / **hide** (a button; clicking
-  the name also shows it), expand (▸) to list its stops, calc, optimize, GPX download, tags, add to plan
-  (a plan picker), duplicate, delete, table. **table** opens the route table: each stop's number, bonus,
+- **Routes:** create from ticked POIs with a profile; for the selected route the toolbar has **show** /
+  **hide** (clicking the row also shows it), **stops** to list its stops, calc, optimize, GPX download,
+  tag stops, add to plan (a plan picker), rename, duplicate, delete, table; its tags are chips on its row. **rename** asks for the new name (`PATCH /routes/{id}`
+  `{name}`); the stops, line and leg times stay. **table** opens the route table: each stop's number, bonus,
   points, running points total, leg miles, arrival time and minutes stopped, plus the finish time. Arrival is
   the **Start** time (in the table; saved as the `start_minutes` setting) plus the saved leg times and the
   minutes at earlier stops, so it opens without GraphHopper. A route without leg times (not calculated, a GPX
@@ -354,7 +365,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   landscape letter: it fills the left half (5.5 × 8.5 in) with a dashed line to cut or fold along. The text
   shrinks with the stop count (12 pt down to 6 pt) so a route fits the half page; one of more than about 50
   stops continues on the left half of a second page, with the headings repeated. **duplicate** asks for a name ("<name> (copy)" by default), then
-  shows the copy and scrolls to it, so a route can be changed without losing the original. The shown route's row is highlighted and its button reads "hide". Showing a
+  selects and shows the copy and scrolls to it, so a route can be changed without losing the original. A new route is selected and scrolled to the same way. While the selected route is drawn, the toolbar's button reads "hide". Showing a
   route draws its line, fits the map to it, and numbers its stops on the map in blue (a POI used twice
   shows "2,5"). **Clear map** hides the line, removes the stop numbers and unticks everything without
   deleting anything. Stop markers are 24 px, blue, numbered by position.
@@ -362,11 +373,11 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   nears its top or bottom edge), or click its position number and type the new position. Either saves
   the new order in one request. The Selected card has the same handle and position number. Rows are
   keyed by position, since a POI can be a stop twice (`startDrag()`, `positionButton()`, `moveTo()`).
-- **Tag stops:** a route's **tag stops** button asks for a tag (the route's name by default) and adds it
+- **Tag stops:** the toolbar's **tag stops** button asks for a tag (the route's name by default) and adds it
   to every POI on the route, once each. An Undo bar then offers to take it off again, only from the POIs
   that did not already have it.
-- **Stops:** in an expanded route each stop has up, down and remove (×). Each change is saved at once and
-  clears the line. The route then reads "order changed, recalc" and shows a **recalc** button, which
+- **Stops:** in the selected route's stop list each stop has up, down and remove (×). Each change is saved at once and
+  clears the line. The route then reads "order changed, recalc" and the toolbar shows a **recalc** button, which
   calculates the line through the stops in the order the user set. Nothing reorders or recalculates on
   its own; optimize only runs when clicked, through the accept / reject review.
 - **Optimize is a review:** optimize asks the preview endpoint and opens a dialog with the current and

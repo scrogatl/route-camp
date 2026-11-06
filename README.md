@@ -70,10 +70,14 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
   Use the tag filter to show a subset, or type a tag and press "Tag selected" to tag the ticked POIs.
 - **Routes**: tick POIs in the order you want to visit them, give the route a name, choose a profile
   (`car` = fastest, `fun` = curvy secondary roads, avoids motorways), and press "Create from selected POIs".
-  Then press **calc** to route it. Click the route name to draw it and see distance and time.
+  Each route is one row with its miles, time, stops and points. Click a row to select it and draw it on the
+  map; the toolbar at the top of the Routes section then acts on that route: show / hide, **stops** (list,
+  reorder, add or remove stops), **calc** (or an orange **recalc** after a stop change), optimize, table,
+  GPX, tag stops, add to plan, rename, duplicate and delete. Tick several rows' boxes to tag them together.
 - **table**: the route's stops in a table with points, running points, leg miles and arrival times from a
   start time you set there. It uses the leg times saved at **calc**, so it opens any time. **Print** prints it on the left half of a
   landscape letter page (5.5 × 8.5 in, with a dashed cut line).
+- **rename**: gives a route a new name; its stops and line stay.
 - **duplicate**: copies a route (stops, tags and line) under a new name, to try changes without losing the original.
 - **optimize**: reorders a route's stops for the shortest travel time (first stop stays as start). Calculate again afterwards.
 - **Plans**: a plan is an ordered list of routes. Create one in the Plans section, then add routes with the

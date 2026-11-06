@@ -23,10 +23,11 @@ const state = {
   selected: [] as number[], // POI ids in the order they were ticked (= route order)
   selectedRoutes: [] as number[], // ticked route ids, for tagging several routes at once
   shownRouteId: null as number | null,
+  activeRouteId: null as number | null, // the route the Routes toolbar acts on; stays selected when hidden
   shownPlanId: null as number | null,
 };
 
-const expandedRoutes = new Set<number>(); // routes whose stops are listed in the sidebar
+const expandedRoutes = new Set<number>(); // routes whose stops are listed when selected
 // Routes whose stops were reordered since their line was last calculated. Kept in memory only; after a
 // reload a route without a line simply reads "not calculated".
 const staleRoutes = new Set<number>();
@@ -381,8 +382,10 @@ function fitTo(points: LonLat[]): void {
   map.fitBounds(bounds, { padding: 60 });
 }
 
+// Drawing a route also selects it for the Routes toolbar.
 function showRoute(route: Route): void {
   state.shownRouteId = route.id;
+  state.activeRouteId = route.id;
   state.shownPlanId = null;
   setSummary(routeSummary(route));
   renderRoutes();
@@ -1495,24 +1498,24 @@ function planPicker(route: Route): HTMLElement {
   return select;
 }
 
+// One compact row per route: a tick box (for tagging several routes), then the name and stats. Clicking
+// the row selects the route and draws it; the toolbar above the list acts on the selected route. Only the
+// selected row lists its tags and, when opened with "stops", its stops.
 function renderRouteItem(route: Route): HTMLElement {
-  const expanded = expandedRoutes.has(route.id);
+  const active = state.activeRouteId === route.id;
   const stale = staleRoutes.has(route.id);
-  const shown = state.shownRouteId === route.id;
-  const toggleStops = () => {
-    if (expanded) expandedRoutes.delete(route.id);
-    else expandedRoutes.add(route.id);
-    renderRoutes();
-  };
+  const classes = ["route", active ? "active" : "", state.shownRouteId === route.id ? "shown" : ""];
   return h(
     "li",
-    { className: shown ? "route shown" : "route", "data-route-id": route.id },
+    { className: classes.filter(Boolean).join(" "), "data-route-id": route.id },
     h(
       "div",
       { className: "route-head" },
       h("input", {
         type: "checkbox",
+        className: "route-tick",
         title: "Tick to tag several routes at once",
+        "aria-label": `Tick ${route.name} for tagging`,
         checked: state.selectedRoutes.includes(route.id),
         onchange: () => {
           state.selectedRoutes = state.selectedRoutes.includes(route.id)
@@ -1520,80 +1523,84 @@ function renderRouteItem(route: Route): HTMLElement {
             : [...state.selectedRoutes, route.id];
         },
       }),
-      h("button", {
-        className: "expand",
-        title: expanded ? "Hide stops" : "Show stops",
-        "aria-expanded": expanded,
-        onclick: toggleStops,
-      }),
       h(
-        "span",
+        "button",
         {
-          className: "name",
-          title: `Show ${route.name} on the map`,
+          className: "route-select",
+          title: `Select ${route.name} and show it on the map`,
+          "aria-pressed": active,
           onclick: () => showRoute(route),
         },
-        `${route.name} (${route.geometry_source === "imported" ? "track" : route.profile})`,
+        h("span", { className: "name" }, `${route.name} (${route.geometry_source === "imported" ? "track" : route.profile})`),
+        h("span", { className: stale ? "meta stale" : "meta" }, stale ? `order changed, recalc · ${routeStats(route)}` : routeStats(route)),
       ),
     ),
-    h(
-      "div",
-      { className: "route-actions" },
-      h("button", {
-        className: "show-route",
-        title: shown ? "Hide this route and its stop numbers" : "Draw this route on the map",
-        onclick: () => (shown ? clearShownRoute() : showRoute(route)),
-      }, shown ? "hide" : "show"),
-      h(
-        "span",
-        { className: "meta" },
-        stale
-          ? "order changed, recalc"
-          : routeStats(route),
-      ),
-      h("button", {
-        className: stale ? "recalc-route" : "",
-        title: "Calculate the line through the stops in this order",
-        onclick: () => run(() => calculate(route)),
-      }, stale ? "recalc" : "calc"),
-      h("button", {
-        title: "Table of the stops: bonus, points, miles and arrival time, to print or keep open",
-        onclick: () => showRouteTable(route.id),
-      }, "table"),
-      h("button", {
-        title: "Review a shorter stop order before saving it",
-        onclick: () => run(() => optimize(route)),
-      }, "optimize"),
-      h("a", { href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX"),
-      h("button", {
-        title: "Add a tag to every POI that is a stop of this route",
-        onclick: () => run(() => tagRouteStops(route)),
-      }, "tag stops"),
-      planPicker(route),
-      h("button", {
-        title: "Make a copy of this route (stops, tags and line) to change without losing the original",
-        onclick: () => run(() => duplicate(route)),
-      }, "duplicate"),
-      h("button", {
-        className: "danger",
-        title: "Delete route",
-        onclick: () =>
-          run(async () => {
-            if (!(await askConfirm(`Delete route "${route.name}"?`, "Delete"))) return;
-            await api.deleteRoute(route.id);
-            if (state.shownRouteId === route.id) clearShownRoute();
-            await refresh();
-          }),
-      }, "delete"),
-    ),
-    renderRouteTags(route),
-    ...(expanded
+    ...(active ? [renderRouteTags(route)] : []),
+    ...(active && expandedRoutes.has(route.id)
       ? [
           renderStops(route),
           renderAddStops(route),
           h("p", { className: "hint stops-hint" }, "Drag ⠿ or click a stop's number to move it. The stops stay in this order; after a change, press recalc to draw the line through them."),
         ]
       : []),
+  );
+}
+
+// The actions for the selected route, kept at the top of the Routes section. Without a selection the
+// buttons are there but disabled, so the toolbar does not jump about.
+function renderRouteToolbar(): void {
+  const route = state.routes.find((r) => r.id === state.activeRouteId) ?? null;
+  const shown = route !== null && state.shownRouteId === route.id;
+  const stale = route !== null && staleRoutes.has(route.id);
+  const expanded = route !== null && expandedRoutes.has(route.id);
+  const act = (label: string, title: string, action: (route: Route) => void, props: Record<string, unknown> = {}) =>
+    h("button", { title, disabled: !route, onclick: () => route && action(route), ...props }, label);
+  $("route-toolbar").replaceChildren(
+    h(
+      "div",
+      { className: "toolbar-title" },
+      route
+        ? h("strong", { title: route.name }, route.name)
+        : h("span", { className: "meta" }, "Select a route below to act on it."),
+      ...(stale ? [h("span", { className: "stale" }, "order changed, recalc")] : []),
+    ),
+    h(
+      "div",
+      { className: "toolbar-buttons" },
+      act(shown ? "hide" : "show", shown ? "Hide this route and its stop numbers" : "Draw this route on the map",
+        (r) => (shown ? clearShownRoute() : showRoute(r)), { className: "show-route" }),
+      act("stops", expanded ? "Hide the list of stops" : "List the stops, to reorder, remove or add some", (r) => {
+        if (expanded) expandedRoutes.delete(r.id);
+        else expandedRoutes.add(r.id);
+        renderRoutes();
+      }, { "aria-expanded": expanded }),
+      act(stale ? "recalc" : "calc", "Calculate the line through the stops in this order",
+        (r) => run(() => calculate(r)), stale ? { className: "recalc-route" } : {}),
+      act("optimize", "Review a shorter stop order before saving it", (r) => run(() => optimize(r))),
+      act("table", "Table of the stops: bonus, points, miles and arrival time, to print or keep open",
+        (r) => showRouteTable(r.id)),
+      route
+        ? h("a", { className: "button", href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX")
+        : h("button", { disabled: true, title: "Export GPX" }, "GPX"),
+      act("tag stops", "Add a tag to every POI that is a stop of this route", (r) => run(() => tagRouteStops(r))),
+      route ? planPicker(route) : h("select", { className: "plan-picker", disabled: true }, h("option", {}, "add to plan…")),
+      act("rename", "Rename route", (r) =>
+        run(async () => {
+          const name = (await askText("Route name?", r.name))?.trim();
+          if (!name || name === r.name) return;
+          await api.updateRoute(r.id, { name });
+          await refresh();
+        })),
+      act("duplicate", "Make a copy of this route (stops, tags and line) to change without losing the original",
+        (r) => run(() => duplicate(r))),
+      act("delete", "Delete route", (r) =>
+        run(async () => {
+          if (!(await askConfirm(`Delete route "${r.name}"?`, "Delete"))) return;
+          await api.deleteRoute(r.id);
+          if (state.shownRouteId === r.id) clearShownRoute();
+          await refresh();
+        }), { className: "danger" }),
+    ),
   );
 }
 
@@ -1661,6 +1668,7 @@ function renderRouteTags(route: Route): HTMLElement {
 }
 
 function renderRoutes(): void {
+  renderRouteToolbar();
   renderFolders($("route-list"), "route", state.routes, renderRouteItem, renderRoutes);
 }
 
@@ -1802,6 +1810,7 @@ async function refresh(): Promise<void> {
   state.routes = routes;
   state.plans = plans;
   state.selectedRoutes = state.selectedRoutes.filter((id) => routes.some((route) => route.id === id));
+  if (!routes.some((route) => route.id === state.activeRouteId)) state.activeRouteId = null;
   renderPois();
   renderRoutes();
   renderPlans();

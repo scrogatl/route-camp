@@ -188,7 +188,7 @@ li.item button { padding: 1px 7px; }
 @media (max-width: 720px) {
   body { height: auto; }
   #app { flex-direction: column; }
-  #sidebar { width: auto; }
+  #sidebar { width: auto; overflow-y: visible; } /* the page scrolls, so the Routes toolbar sticks to the screen */
   #sidebar-resizer { display: none; }
   #map-view { height: 60vh; padding: 0 10px 10px; }
 }
@@ -241,18 +241,53 @@ button.folder-head {
 button.folder-head:hover { background: none; color: var(--accent); }
 ul.folder-items { margin-left: 8px; }
 
-/* Routes: the name gets the full row; actions sit on a line below it. */
-li.route { padding: 4px 0 4px 4px; border-left: 3px solid transparent; border-radius: 4px; }
-.route-head { display: flex; align-items: center; gap: 4px; }
-.route-head .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.route-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-left: 22px; }
-.route-actions .meta { margin-right: auto; }
-button.expand { background: none; border: 0; padding: 0 2px; margin: 0; color: var(--muted); }
-
+/* Routes: one compact row each (tick box, then name over stats); clicking the row selects it. */
+li.route { padding: 2px 0 2px 2px; border-left: 3px solid transparent; border-radius: 4px; }
+.route-head { display: flex; align-items: flex-start; gap: 4px; }
+input.route-tick { margin: 6px 2px 0 0; opacity: 0.5; }
+input.route-tick:checked, li.route:hover input.route-tick, input.route-tick:focus-visible { opacity: 1; }
+button.route-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font-weight: 400;
+  text-align: left;
+}
+button.route-select:hover { background: var(--accent-soft); }
+button.route-select .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.route-select .name { font-weight: 600; }
+.meta.stale, .toolbar-title .stale { color: var(--warn); }
 ol.route-stops { margin: 4px 0 4px 22px; padding: 0; list-style: none; }
 ol.route-stops li { display: flex; gap: 6px; padding: 2px 0; align-items: center; }
 ol.route-stops .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stop-number { min-width: 1.5em; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* The Routes toolbar: the selected route's actions, kept in view while the list scrolls. */
+#route-toolbar {
+  position: sticky;
+  top: -10px; /* the sidebar's padding, so it sits flush with the top edge */
+  z-index: 2;
+  margin: 0 -14px 6px;
+  padding: 6px 14px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.toolbar-title { display: flex; gap: 6px; font-size: 13px; white-space: nowrap; }
+.toolbar-title strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.toolbar-title .stale { flex-shrink: 0; }
+.toolbar-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; }
+.toolbar-buttons button, .toolbar-buttons .button { font-size: 12px; padding: 2px 7px; }
+a.button { display: inline-block; text-decoration: none; }
+@media (max-width: 720px) { #route-toolbar { top: 0; } }
+
+
 
 /* Stops of the route on the map: blue, numbered, so they stand apart from other POIs. */
 .marker.stop, .marker.numbered {
@@ -314,9 +349,9 @@ button.folder-action { font-size: 11px; padding: 0 6px; margin: 0; }
 }
 #undo-bar button { margin: 0; }
 
-/* Route rows: the shown route is highlighted; its name is an obvious link. */
-li.route.shown { border-left-color: var(--accent); background: var(--accent-soft); }
-.route-head .name:hover { text-decoration: underline; color: var(--accent); }
+/* Route rows: the selected route is highlighted, more strongly while it is drawn on the map. */
+li.route.active { border-left-color: var(--line); background: var(--bg); }
+li.route.active.shown { border-left-color: var(--accent); background: var(--accent-soft); }
 button.show-route { background: var(--accent); color: var(--accent-text); }
 .stops-hint { margin: 0 0 4px 22px; }
 .plan-picker { width: auto; max-width: 150px; margin: 0; padding: 2px 4px; font-size: 12px; }
