@@ -479,10 +479,30 @@ li.route.just-added { animation: route-flash 2.5s ease-out; }
 #route-table-dialog .start-time { display: inline-flex; gap: 6px; align-items: center; margin: 6px 0 10px; }
 table.route-table td, table.route-table th { padding: 4px 8px; }
 
+#route-table-dialog .print-only { display: none; }
+
+/* Printed: landscape letter, the table on the left half (5.5 x 8.5 in) with a dashed line to cut or fold
+   along. --print-font (set by renderRouteTable from the stop count) shrinks the text so every stop fits;
+   a route too long for that (over about 50 stops) carries on to the left half of a second page. */
+@page { size: letter landscape; margin: 0.35in 0; }
 @media print {
+  body { height: auto; background: #fff; }
   body > :not(#route-table-dialog) { display: none !important; }
-  #route-table-dialog { position: static; border: none; width: auto; max-height: none; padding: 0; color: #000; background: #fff; }
+  #route-table-dialog {
+    position: static; margin: 0;
+    width: 5.5in; min-height: 7.8in; max-width: none; max-height: none; box-sizing: border-box;
+    padding: 0 0.3in; overflow: visible;
+    border: none; border-right: 1px dashed #999; border-radius: 0;
+    color: #000; background: #fff; font-size: var(--print-font, 10pt);
+  }
   #route-table-dialog::backdrop { background: none; }
-  #route-table-dialog .no-print { display: none; }
-  table.route-table td, table.route-table th { border-bottom: 1px solid #ccc; }
+  #route-table-dialog .no-print, #route-table-dialog .start-time input { display: none; }
+  #route-table-dialog .print-only { display: inline; }
+  #route-table-dialog h2 { font-size: 1.3em; margin: 0 0 2px; }
+  #route-table-dialog .meta, #route-table-dialog .hint { font-size: 0.85em; color: #000; margin: 2px 0; }
+  #route-table-dialog .start-time { margin: 2px 0 4px; }
+  #route-table-dialog .table-wrap { overflow: visible; }
+  table.route-table { font-size: 1em; }
+  table.route-table th { font-size: 0.8em; color: #000; }
+  table.route-table td, table.route-table th { padding: 1.5pt 4pt; border-bottom: 0.5pt solid #bbb; line-height: 1.2; }
 }

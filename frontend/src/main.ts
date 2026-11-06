@@ -1084,10 +1084,13 @@ function renderRouteTable(routeId: number): void {
     : route.geometry_source === "imported"
       ? "A GPX track has no time per leg: press calc on the route for arrival times."
       : "Not calculated: press calc on the route for miles and arrival times.";
+  // Printed font size so the stops fill, but fit, the 7.8 in of a half letter page, with some to spare (title and notes ~4 lines).
+  const printFont = Math.min(12, Math.max(6, (520 - 3 * (rows.length + 1)) / (1.25 * (rows.length + 5))));
+  box.style.setProperty("--print-font", `${printFont.toFixed(1)}pt`);
   box.replaceChildren(
     h("h2", {}, route.name),
     h("p", { className: "meta" }, routeStats(route)),
-    h("label", { className: "start-time" }, "Start ", startInput),
+    h("label", { className: "start-time" }, "Start ", startInput, h("span", { className: "print-only" }, formatClock(startMinutes))),
     h(
       "div",
       { className: "table-wrap" },

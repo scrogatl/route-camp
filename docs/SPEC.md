@@ -350,7 +350,10 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   points, running points total, leg miles, arrival time and minutes stopped, plus the finish time. Arrival is
   the **Start** time (in the table; saved as the `start_minutes` setting) plus the saved leg times and the
   minutes at earlier stops, so it opens without GraphHopper. A route without leg times (not calculated, a GPX
-  track, or calculated before legs were saved) shows no arrivals until **calc**. **Print** prints the table alone. **duplicate** asks for a name ("<name> (copy)" by default), then
+  track, or calculated before legs were saved) shows no arrivals until **calc**. **Print** prints the table alone, on
+  landscape letter: it fills the left half (5.5 × 8.5 in) with a dashed line to cut or fold along. The text
+  shrinks with the stop count (12 pt down to 6 pt) so a route fits the half page; one of more than about 50
+  stops continues on the left half of a second page, with the headings repeated. **duplicate** asks for a name ("<name> (copy)" by default), then
   shows the copy and scrolls to it, so a route can be changed without losing the original. The shown route's row is highlighted and its button reads "hide". Showing a
   route draws its line, fits the map to it, and numbers its stops on the map in blue (a POI used twice
   shows "2,5"). **Clear map** hides the line, removes the stop numbers and unticks everything without

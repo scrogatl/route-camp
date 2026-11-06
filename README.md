@@ -72,7 +72,8 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
   (`car` = fastest, `fun` = curvy secondary roads, avoids motorways), and press "Create from selected POIs".
   Then press **calc** to route it. Click the route name to draw it and see distance and time.
 - **table**: the route's stops in a table with points, running points, leg miles and arrival times from a
-  start time you set there. It uses the leg times saved at **calc**, so it opens any time; **Print** prints it.
+  start time you set there. It uses the leg times saved at **calc**, so it opens any time. **Print** prints it on the left half of a
+  landscape letter page (5.5 × 8.5 in, with a dashed cut line).
 - **duplicate**: copies a route (stops, tags and line) under a new name, to try changes without losing the original.
 - **optimize**: reorders a route's stops for the shortest travel time (first stop stays as start). Calculate again afterwards.
 - **Plans**: a plan is an ordered list of routes. Create one in the Plans section, then add routes with the
