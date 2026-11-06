@@ -437,3 +437,18 @@ button.position:hover { background: none; color: var(--accent); text-decoration:
 ol.route-stops { user-select: none; }
 ol.route-stops li.dragging { background: var(--accent-soft); outline: 1px dashed var(--accent); }
 ol.route-stops li button:not(.position) { padding: 0 6px; margin: 0; }
+
+/* Typed or pasted list of bonuses, in the Selected card. */
+#paste-list { margin: 6px 0; }
+#paste-list > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; }
+textarea {
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  width: 100%;
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }

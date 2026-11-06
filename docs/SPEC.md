@@ -252,6 +252,14 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   to the end of a picked route, in order, skipping stops it already has; like any stop change it clears
   the line until recalc (and asks first on an imported track). Both clear the selection and show the
   route on the map. Nothing in the card ever reorders; optimize stays a separate review on a route.
+- **Type or paste a list:** a fold-out box in the Selected card takes bonus codes or POI names in route
+  order. Pieces are split on new lines, commas, semicolons, tabs and arrows (→, ->); within a piece the
+  words are matched greedily, longest run first, so "Rally HQ Warner Robins ABAC BLHD" on one line finds
+  the multi-word name and both codes. A name matches exactly (any case), or else a POI whose name is it
+  plus a space and more ("ABAC" finds "ABAC 510"). **Set selection** replaces the selection with the
+  matches in the listed order; **Add to selection** appends them. A dialog lists anything not found,
+  matching more than one POI, or listed twice (the first is kept); when everything matched the box
+  empties. Then Create route in this order makes the route (`matchBonusList()` in `main.ts`).
 - **Import card:** one file field for `.gpx` or a rally `.csv`; a `.csv` name goes to `/rally/import`,
   anything else to `/gpx/import`, and a dialog reports what was created vs matched.
 - The sidebar is resizable: drag the handle on its right edge (or focus it and use the arrow keys);

@@ -30,6 +30,16 @@
           <section class="card" id="selected-card">
             <h2>Selected <span id="selected-count" class="meta"></span></h2>
             <p class="hint">Tick bonuses on the map, in the POI list or in the Bonuses table. Drag ⠿ (or use ↑ ↓) to set the order. A route made here keeps exactly this order.</p>
+            <details id="paste-list">
+              <summary>Type or paste a list of bonuses</summary>
+              <label class="field"><span>Bonus codes or POI names <small>in route order, separated by commas, spaces, new lines or →; "ABAC" also finds "ABAC 510"</small></span>
+                <textarea id="paste-text" rows="4" spellcheck="false" placeholder="Rally HQ Warner Robins, ANDC, BLHD, BENH, Rally HQ END"></textarea>
+              </label>
+              <div class="actions">
+                <button id="paste-set" class="primary" title="Replace the selection with these bonuses, in this order">Set selection</button>
+                <button id="paste-add" title="Add these bonuses after the current selection">Add to selection</button>
+              </div>
+            </details>
             <ol id="selected-list"></ol>
             <p id="selected-total" class="status"></p>
             <label class="field"><span>Route name</span>

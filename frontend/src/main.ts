@@ -825,6 +825,72 @@ function renderSelected(): void {
   ($("append-selected") as HTMLButtonElement).disabled = pois.length === 0;
 }
 
+// --- Typed or pasted list -> selection ------------------------------------------
+
+// POIs a piece of text names: an exact name (any case) first, otherwise names that start with it and a
+// space, so a rally code "ABAC" finds "ABAC 510".
+function poisNamed(text: string): POI[] {
+  const wanted = text.toUpperCase();
+  const exact = state.pois.filter((poi) => poi.name.toUpperCase() === wanted);
+  return exact.length ? exact : state.pois.filter((poi) => poi.name.toUpperCase().startsWith(wanted + " "));
+}
+
+interface ListMatch {
+  ids: number[]; // in the order listed, each once
+  missing: string[];
+  ambiguous: string[];
+  repeated: string[];
+}
+
+// Reads a list in route order. Pieces are split on new lines, commas, semicolons, tabs and arrows; within
+// a piece, words are matched greedily, longest first, so "Rally HQ Warner Robins ABAC BLHD" on one line
+// still finds the multi-word name and the two codes.
+function matchBonusList(text: string): ListMatch {
+  const result: ListMatch = { ids: [], missing: [], ambiguous: [], repeated: [] };
+  const add = (poi: POI, label: string) => {
+    if (result.ids.includes(poi.id)) result.repeated.push(label);
+    else result.ids.push(poi.id);
+  };
+  for (const piece of text.split(/[\n,;\t]|→|->/)) {
+    const words = piece.trim().split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < words.length) {
+      // The longest run of words from i that names exactly one POI; a single word that doesn't is reported.
+      let j = words.length;
+      while (j > i + 1 && poisNamed(words.slice(i, j).join(" ")).length !== 1) j--;
+      const label = words.slice(i, j).join(" ");
+      const pois = poisNamed(label);
+      if (pois.length === 1) add(pois[0], label);
+      else (pois.length > 1 ? result.ambiguous : result.missing).push(label);
+      i = j;
+    }
+  }
+  return result;
+}
+
+function applyBonusList(replace: boolean): void {
+  const textarea = $<HTMLTextAreaElement>("paste-text");
+  const match = matchBonusList(textarea.value);
+  if (!match.ids.length && !match.missing.length && !match.ambiguous.length) {
+    notify("Type or paste some bonus codes first.");
+    return;
+  }
+  const base = replace ? [] : state.selected;
+  const added = match.ids.filter((id) => !base.includes(id));
+  setSelectedOrder([...base, ...added]);
+  const problems = [
+    match.missing.length ? `Not found: ${match.missing.join(", ")}.` : "",
+    match.ambiguous.length ? `More than one POI matches: ${match.ambiguous.join(", ")}. Type the full name.` : "",
+    match.repeated.length ? `Listed twice (kept the first): ${match.repeated.join(", ")}.` : "",
+    !replace && added.length < match.ids.length ? `${match.ids.length - added.length} were already selected.` : "",
+  ].filter(Boolean);
+  if (problems.length) {
+    notify([`Selected ${added.length} of the listed bonuses.`, ...problems].join("\n"));
+  } else {
+    textarea.value = ""; // everything matched; nothing left to fix
+  }
+}
+
 // Creates the route through the selection in exactly its order, then calculates the line in that order.
 async function createRouteFromSelection(): Promise<void> {
   const nameInput = $<HTMLInputElement>("route-name");
@@ -1617,6 +1683,8 @@ $("route-untag-selected").onclick = () => run(() => tagSelectedRoutes(false));
 $("route-create").onclick = () => run(createRouteFromSelection);
 $("append-selected").onclick = () => run(appendSelectionToRoute);
 $("selected-clear").onclick = () => setSelectedOrder([]);
+$("paste-set").onclick = () => applyBonusList(true);
+$("paste-add").onclick = () => applyBonusList(false);
 
 for (const tab of document.querySelectorAll<HTMLButtonElement>(".view-tabs button")) {
   tab.onclick = () => setView(tab.dataset.view === "bonuses" ? "bonuses" : "map");
