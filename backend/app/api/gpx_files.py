@@ -62,15 +62,17 @@ def _summary_out(summary: ImportSummary) -> ImportSummaryOut:
 def export_route(
     route_id: int,
     shaping_km: float | None = None,
+    track: bool = True,
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_app_settings),
 ):
-    """shaping_km overrides the configured shaping-point spacing for this download; 0 leaves them out."""
+    """shaping_km overrides the configured shaping-point spacing for this download; 0 leaves them out.
+    track=false leaves out the cached line, for a GPS."""
     route = get_or_404(session, Route, route_id)
     spacing_km = settings.shaping_spacing_km if shaping_km is None else shaping_km
     filename = re.sub(r"[^A-Za-z0-9_-]+", "-", route.name).strip("-") or "route"
     return Response(
-        content=export_route_gpx(route, spacing_km * 1000, settings.max_route_points),
+        content=export_route_gpx(route, spacing_km * 1000, settings.max_route_points, track),
         media_type="application/gpx+xml",
         headers={"Content-Disposition": f'attachment; filename="{filename}.gpx"'},
     )

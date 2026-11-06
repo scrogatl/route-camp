@@ -96,9 +96,13 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
     start/end POIs and length (within 2%, or 500 m). The import message lists what was created and what was already there.
   - An imported track is marked as such. **calc** and **optimize** ask before replacing it, because calculating
     gives a GraphHopper line instead. Changing a route's stops or profile also clears the cached line.
-  - Each route's **GPX** link exports waypoints, route points and the cached line as a track. The route points
-    include Garmin shaping points about every 10 km along the line, so a Garmin that recalculates stays on the
-    planned roads (`SHAPING_SPACING_KM` and `MAX_ROUTE_POINTS` in `.env`; see `docs/SPEC.md`).
+  - Each route's **GPX** link exports waypoints and route points, for a GPS or MyRoute-app. The stops are via
+    points; the other route points are Garmin shaping points about every 10 km along the line, so a Garmin that
+    recalculates stays on the planned roads without making you reach each one (`SHAPING_SPACING_KM` and
+    `MAX_ROUTE_POINTS` in `.env`; see `docs/SPEC.md`). **GPX + line** adds the cached line as a track, for
+    BaseCamp or a map; don't load that one onto a GPS, which may turn the track into a trip with a stop at
+    every point. In MyRoute-app, turn on **Lock Route** before Navigate: otherwise it re-plans the route and
+    turns the shaping points into many waypoints of its own.
 
 ## Architecture
 

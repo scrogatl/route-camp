@@ -1606,8 +1606,13 @@ function renderRouteToolbar(): void {
       one("table", "Table of the stops: bonus, points, miles and arrival time, to print or keep open",
         (r) => showRouteTable(r.id)),
       route
-        ? h("a", { className: "button", href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX")
+        ? h("a", { className: "button", href: api.routeGpxUrl(route.id), download: "",
+          title: "Export GPX for a GPS or MyRoute-app: the stops and shaping points, without the line" }, "GPX")
         : h("button", { disabled: true, title: "Export GPX (select one route)" }, "GPX"),
+      route
+        ? h("a", { className: "button", href: api.routeGpxUrl(route.id, true), download: "",
+          title: "Export GPX with the line as a track too, for BaseCamp or a map. A GPS may turn the track into a trip with a stop at every point" }, "GPX + line")
+        : h("button", { disabled: true, title: "Export GPX with the line (select one route)" }, "GPX + line"),
       all("tag", `Add a tag to${several}`, (rs) => run(() => tagRoutes(rs, true))),
       all("untag", `Remove a tag from${several}`, (rs) => run(() => tagRoutes(rs, false))),
       all("tag stops", `Add a tag to every POI that is a stop of${several}`, (rs) => run(() => tagRouteStops(rs))),

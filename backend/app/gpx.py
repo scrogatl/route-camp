@@ -11,6 +11,12 @@ from gpxpy.gpx import GPX, GPXRoute, GPXRoutePoint, GPXTrack, GPXTrackPoint, GPX
 # Garmin's trip extensions mark each route point as a via point (a stop the device announces) or a shaping
 # point (the device routes through it silently). Without them, devices treat every route point as a stop.
 TRIP_NS = "http://www.garmin.com/xmlschemas/TripExtensions/v1"
+# Garmin's GPX extensions. BaseCamp writes a RoutePointExtension on every route point and a RouteExtension plus a
+# trp:Trip on the route; without them a zūmo (and MyRoute-app) can ignore trp:ShapingPoint and make every route
+# point a stop the rider has to reach.
+GPXX_NS = "http://www.garmin.com/xmlschemas/GpxExtensions/v3"
+# No road shape stored between this point and the next: the device calculates the leg itself.
+NO_ROAD_SHAPE = "000000000000FFFFFFFFFFFFFFFFFFFFFFFF"
 
 
 @dataclass
@@ -26,13 +32,26 @@ def _is_shaping(point) -> bool:
     return any(ext.tag == f"{{{TRIP_NS}}}ShapingPoint" for ext in point.extensions)
 
 
-def _trip_extension(shaping: bool) -> ET.Element:
+def _route_point_extensions(shaping: bool) -> list[ET.Element]:
     if shaping:
-        return ET.Element(f"{{{TRIP_NS}}}ShapingPoint")
-    via = ET.Element(f"{{{TRIP_NS}}}ViaPoint")
-    ET.SubElement(via, f"{{{TRIP_NS}}}CalculationMode").text = "FasterTime"
-    ET.SubElement(via, f"{{{TRIP_NS}}}ElevationMode").text = "Standard"
-    return via
+        kind = ET.Element(f"{{{TRIP_NS}}}ShapingPoint")
+    else:
+        kind = ET.Element(f"{{{TRIP_NS}}}ViaPoint")
+        ET.SubElement(kind, f"{{{TRIP_NS}}}CalculationMode").text = "FasterTime"
+        ET.SubElement(kind, f"{{{TRIP_NS}}}ElevationMode").text = "Standard"
+    point = ET.Element(f"{{{GPXX_NS}}}RoutePointExtension")
+    ET.SubElement(point, f"{{{GPXX_NS}}}Subclass").text = NO_ROAD_SHAPE
+    return [kind, point]
+
+
+def _route_extensions() -> list[ET.Element]:
+    """Marks the route as a Garmin trip routed for a motorcycle, as BaseCamp writes it."""
+    route = ET.Element(f"{{{GPXX_NS}}}RouteExtension")
+    ET.SubElement(route, f"{{{GPXX_NS}}}IsAutoNamed").text = "false"
+    ET.SubElement(route, f"{{{GPXX_NS}}}DisplayColor").text = "Magenta"
+    trip = ET.Element(f"{{{TRIP_NS}}}Trip")
+    ET.SubElement(trip, f"{{{TRIP_NS}}}TransportationMode").text = "Motorcycling"
+    return [route, trip]
 
 
 @dataclass
@@ -81,18 +100,21 @@ def build_route_gpx(
     geometry: list[tuple[float, float]] | None = None,
 ) -> str:
     """Waypoints = unique POIs, rtept = the route's ordered stops (plus any shaping points between them, each
-    marked with Garmin's trip extensions), trk = cached calculated line (lat, lon)."""
+    marked with Garmin's trip extensions), trk = cached calculated line (lat, lon). Leave geometry out for a
+    GPS: some turn the track into a trip of their own, with a stop at every track point."""
     gpx = GPX()
     gpx.creator = "route-camp"
     gpx.nsmap["trp"] = TRIP_NS
+    gpx.nsmap["gpxx"] = GPXX_NS
     gpx.waypoints = [
         GPXWaypoint(latitude=p.lat, longitude=p.lon, name=p.name, description=p.desc) for p in waypoints
     ]
     route = GPXRoute(name=route_name)
+    route.extensions.extend(_route_extensions())
     route.points = []
     for p in route_points:
         point = GPXRoutePoint(latitude=p.lat, longitude=p.lon, name=p.name, description=p.desc)
-        point.extensions.append(_trip_extension(p.shaping))
+        point.extensions.extend(_route_point_extensions(p.shaping))
         route.points.append(point)
     gpx.routes.append(route)
     if geometry:

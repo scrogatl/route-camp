@@ -1,10 +1,14 @@
+import xml.etree.ElementTree as ET
+
 from sqlalchemy import select
 
 from app.geo import haversine_m
-from app.gpx import parse_gpx
+from app.gpx import GPXX_NS, TRIP_NS, parse_gpx
 from app.models import POI, Route
 from app.services import export_route_gpx, import_gpx, set_route_stops
 from app.shaping import shaping_points
+
+GPX_NS = "http://www.topografix.com/GPX/1/1"
 
 # A straight north-south line, one vertex about every 1.1 km (0.01 degrees of latitude), about 110 km long.
 LINE = [(34.0 + i * 0.01, -84.0) for i in range(101)]
@@ -68,3 +72,28 @@ def test_reimporting_an_export_with_shaping_points_creates_no_pois_or_routes(db_
     assert [r.status for r in summary.routes] == ["matched"]
     assert len(db_session.scalars(select(POI)).all()) == 2
     assert len(db_session.scalars(select(Route)).all()) == 1
+
+
+def test_export_writes_basecamp_trip_extensions(db_session):
+    xml = export_route_gpx(_route(db_session), shaping_spacing_m=10_000, max_route_points=50)
+    root = ET.fromstring(xml)
+    [rte] = root.findall(f"{{{GPX_NS}}}rte")
+    route_ext = rte.find(f"{{{GPX_NS}}}extensions")
+    assert route_ext.find(f"{{{GPXX_NS}}}RouteExtension") is not None
+    assert route_ext.findtext(f"{{{TRIP_NS}}}Trip/{{{TRIP_NS}}}TransportationMode") == "Motorcycling"
+    # The route's extensions come before its points, as the GPX schema requires
+    assert list(rte).index(route_ext) < list(rte).index(rte.find(f"{{{GPX_NS}}}rtept"))
+    points = rte.findall(f"{{{GPX_NS}}}rtept")
+    for point in points:
+        ext = point.find(f"{{{GPX_NS}}}extensions")
+        kinds = [child.tag for child in ext]
+        assert kinds[0] in (f"{{{TRIP_NS}}}ViaPoint", f"{{{TRIP_NS}}}ShapingPoint")
+        assert ext.findtext(f"{{{GPXX_NS}}}RoutePointExtension/{{{GPXX_NS}}}Subclass")
+
+
+def test_export_can_leave_the_track_out(db_session):
+    route = _route(db_session)
+    with_track = parse_gpx(export_route_gpx(route, shaping_spacing_m=10_000, max_route_points=50))
+    without = parse_gpx(export_route_gpx(route, shaping_spacing_m=10_000, max_route_points=50, include_track=False))
+    assert with_track.tracks and not without.tracks
+    assert [p.shaping for p in without.routes[0].points] == [p.shaping for p in with_track.routes[0].points]

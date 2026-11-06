@@ -152,7 +152,7 @@ export const api = {
     request<OptimizePreview>(`/routes/${id}/optimize-preview?replace_imported=${replaceImported}`, send("POST")),
   optimizeRoute: (id: number, replaceImported: boolean) =>
     request<{ route: Route; source: string }>(`/routes/${id}/optimize?replace_imported=${replaceImported}`, send("POST")),
-  routeGpxUrl: (id: number) => `/api/routes/${id}/gpx`,
+  routeGpxUrl: (id: number, track = false) => `/api/routes/${id}/gpx?track=${track}`,
 
   listPlans: () => request<Plan[]>("/plans"),
   createPlan: (plan: { name: string; route_ids?: number[]; tags?: string[] }) =>

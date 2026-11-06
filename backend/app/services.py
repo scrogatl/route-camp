@@ -259,8 +259,11 @@ def _gpx_point(poi: POI) -> GpxPoint:
     return GpxPoint(name=poi.name, lat=poi.lat, lon=poi.lon, desc=poi.notes)
 
 
-def export_route_gpx(route: Route, shaping_spacing_m: float = 0, max_route_points: int = 50) -> str:
-    """Shaping points are added between the stops when the route has a line and shaping_spacing_m > 0."""
+def export_route_gpx(
+    route: Route, shaping_spacing_m: float = 0, max_route_points: int = 50, include_track: bool = True
+) -> str:
+    """Shaping points are added between the stops when the route has a line and shaping_spacing_m > 0.
+    include_track adds the line itself as a trk."""
     stops = [stop.poi for stop in route.stops]
     unique_pois = {poi.id: poi for poi in stops}
     geometry = [(lat, lon) for lon, lat in route.geometry] if route.geometry else None
@@ -279,5 +282,5 @@ def export_route_gpx(route: Route, shaping_spacing_m: float = 0, max_route_point
         route_name=route.name,
         waypoints=[_gpx_point(poi) for poi in unique_pois.values()],
         route_points=route_points,
-        geometry=geometry,
+        geometry=geometry if include_track else None,
     )

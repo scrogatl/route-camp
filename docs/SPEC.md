@@ -140,7 +140,7 @@ All under `/api`. Interactive docs at `http://localhost:8080/docs`.
 | `POST /tags/{id}/items` `{kind, id}` · `DELETE /tags/{id}/items/{kind}/{item_id}` | Tag / untag any item |
 | `POST /gpx/import` (multipart `file`) | Import a GPX file; returns what was created vs. matched |
 | `POST /rally/import` (multipart `file`) | Import a rally bonus CSV; returns `{bonuses, pois_created, pois_matched, pois_updated, created: [codes], updated: [names]}` |
-| `GET /routes/{id}/gpx?shaping_km=` | Download a route as GPX; `shaping_km` overrides the shaping-point spacing (0 = none) |
+| `GET /routes/{id}/gpx?shaping_km=&track=` | Download a route as GPX; `shaping_km` overrides the shaping-point spacing (0 = none); `track=false` leaves out the cached line |
 
 ### Routing (`backend/app/routing.py`)
 
@@ -175,7 +175,9 @@ start). OR-Tools or VROOM is the planned upgrade when time windows, a return leg
 ### GPX export
 
 One file per route: `wpt` for each unique POI, one `rte`, and a `trk` with the cached line when there
-is one. Creator is `route-camp`.
+is one and `track` is true. Creator is `route-camp`. The **GPX** button downloads with `track=false` (for a
+GPS or MyRoute-app, which can turn a track into a trip with a stop at every track point); **GPX + line**
+downloads with `track=true`. The API default is `true`.
 
 The `rte` holds the stops in order, with **shaping points** between them when the route has a line
 (`backend/app/shaping.py`):
@@ -183,6 +185,11 @@ The `rte` holds the stops in order, with **shaping points** between them when th
   trip extensions (namespace `http://www.garmin.com/xmlschemas/TripExtensions/v1`, prefix `trp`:
   `<trp:ViaPoint>` with `CalculationMode` FasterTime and `ElevationMode` Standard, or
   `<trp:ShapingPoint/>`). The device routes through shaping points without announcing them.
+- As BaseCamp writes a trip, every route point also has a `gpxx:RoutePointExtension` with `Subclass`
+  `000000000000FFFFFFFFFFFFFFFFFFFFFFFF` (no road shape stored: the device calculates each leg), and
+  the `rte` has a `gpxx:RouteExtension` and a `trp:Trip` with `TransportationMode` Motorcycling (prefix
+  `gpxx`, namespace `http://www.garmin.com/xmlschemas/GpxExtensions/v3`). With only the `trp` marks, a
+  zūmo 396 and MyRoute-app showed the shaping points as stops (November 2026).
 - Shaping points are vertices of the cached line, so they sit on the planned road. Each stop is matched
   to its nearest line vertex, never moving backwards along the line, which splits the line into legs.
 - Within a leg, a point is taken roughly every `shaping_spacing_km` (default 10 km), and none closer
@@ -200,6 +207,11 @@ Example: the 301 km "Test1" route exports 2 stops and 28 shaping points.
 ride (November 2026, route "Walmart-Nav-Test", exported before shaping points existed) the device
 recalculated the route while navigating, which was acceptable. Shaping points were then added to
 keep recalculation on the planned roads; they have not yet been ridden.
+
+**MyRoute-app testing:** the planner imports the shaping points as shaping points. With **Lock Route**
+off, Navigate re-plans the route, turns them into waypoints and adds its own: the 3-stop, 17-shaping-point
+"Too SNAFU" export became 112 waypoints. With Lock Route on, Navigate keeps the imported points and adds
+none (November 2026). Not yet ridden: whether a missed shaping point is still skipped with Lock Route on.
 
 ## 5. GraphHopper setup
 
