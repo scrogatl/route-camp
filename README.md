@@ -66,14 +66,16 @@ Changing `graphhopper/config.yml` (profiles, custom models) needs a rebuild of t
 
 ## Using the app
 
-- **POIs**: click the map to add one. Tick POIs in the sidebar to select them (the marker turns orange).
-  Use the tag filter to show a subset, or type a tag and press "Tag selected" to tag the ticked POIs.
-- **Routes**: tick POIs in the order you want to visit them, give the route a name, choose a profile
+- **POIs**: click the map to add one. Select POIs in the sidebar with their check boxes (the marker turns orange).
+  Use the tag filter to show a subset, or type a tag and press "Tag selected" to tag the selected POIs.
+- **Routes**: select POIs in the order you want to visit them, give the route a name, choose a profile
   (`car` = fastest, `fun` = curvy secondary roads, avoids motorways), and press "Create from selected POIs".
-  Each route is one row with its miles, time, stops and points. Click a row to select it and draw it on the
-  map; the toolbar at the top of the Routes section then acts on that route: show / hide, **stops** (list,
-  reorder, add or remove stops), **calc** (or an orange **recalc** after a stop change), optimize, table,
-  GPX, tag stops, add to plan, rename, duplicate and delete. Tick several rows' boxes to tag them together.
+  Each route is one row with its miles, time, stops and points. Click a row to select just that route and
+  draw it on the map; check more rows' boxes to select several. The toolbar at the top of the Routes section
+  acts on the selection. **calc**, **tag**, **untag**, **tag stops**, add to plan and **delete** work on every
+  selected route; show / hide, **stops** (list, reorder, add or remove stops), optimize, table, GPX, rename
+  and duplicate need exactly one. After a stop change **calc** turns into an orange **recalc**. × in the
+  toolbar unselects all routes.
 - **table**: the route's stops in a table with points, running points, leg miles and arrival times from a
   start time you set there. It uses the leg times saved at **calc**, so it opens any time. **Print** prints it on the left half of a
   landscape letter page (5.5 × 8.5 in, with a dashed cut line).

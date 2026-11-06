@@ -21,9 +21,8 @@ const state = {
   routes: [] as Route[],
   plans: [] as Plan[],
   selected: [] as number[], // POI ids in the order they were ticked (= route order)
-  selectedRoutes: [] as number[], // ticked route ids, for tagging several routes at once
+  selectedRoutes: [] as number[], // selected route ids: the Routes toolbar acts on these
   shownRouteId: null as number | null,
-  activeRouteId: null as number | null, // the route the Routes toolbar acts on; stays selected when hidden
   shownPlanId: null as number | null,
 };
 
@@ -382,10 +381,10 @@ function fitTo(points: LonLat[]): void {
   map.fitBounds(bounds, { padding: 60 });
 }
 
-// Drawing a route also selects it for the Routes toolbar.
+// Drawing a route also makes it the only selected route, for the Routes toolbar.
 function showRoute(route: Route): void {
   state.shownRouteId = route.id;
-  state.activeRouteId = route.id;
+  state.selectedRoutes = [route.id];
   state.shownPlanId = null;
   setSummary(routeSummary(route));
   renderRoutes();
@@ -532,7 +531,7 @@ function toggleSelected(poiId: number): void {
   renderSelection();
 }
 
-// Everything that shows the selection: POI list, "add ticked (N)" on expanded routes, markers, the
+// Everything that shows the selection: POI list, "add selected (N)" on expanded routes, markers, the
 // Selected list and the Bonuses table. They all read state.selected, so ticking anywhere shows everywhere.
 function renderSelection(): void {
   renderPois();
@@ -633,7 +632,7 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
   // Ticks the folder's POIs in its displayed order, after any already ticked; unticks them all when every one is ticked.
   const selectAll = h("button", {
     className: "folder-action",
-    title: allTicked ? "Untick every POI in this folder" : "Tick every POI in this folder",
+    title: allTicked ? "Unselect every POI in this folder" : "Select every POI in this folder",
     onclick: () => {
       state.selected = allTicked
         ? state.selected.filter((id) => !ids.includes(id))
@@ -655,7 +654,7 @@ function poiFolderActions(tag: string, pois: POI[]): HTMLElement[] {
   }, "tag all");
   const routeAction = h("button", {
     className: "folder-action",
-    title: `Make a route from ${ticked(ids) ? "the ticked POIs in" : "all"} this folder`,
+    title: `Make a route from ${ticked(ids) ? "the selected POIs in" : "all"} this folder`,
     onclick: () => run(() => routeFromFolder(tag, pois)),
   }, "route");
   const deleteAction = folderDeleteButton(tag, pois);
@@ -686,7 +685,7 @@ function folderDeleteButton(tag: string, pois: POI[]): HTMLElement {
   return h("button", {
     className: "folder-action danger",
     title: tickedCount
-      ? `Delete the ${tickedCount} ticked POIs in this folder (permanent)`
+      ? `Delete the ${tickedCount} selected POIs in this folder (permanent)`
       : `Delete all ${pois.length} POIs in this folder (permanent)`,
     onclick: () => run(() => deleteFolderPois(tag, pois)),
   }, `delete ${scope}`);
@@ -701,7 +700,7 @@ async function deleteFolderPois(tag: string, pois: POI[]): Promise<void> {
   const targetIds = new Set(targets.map((poi) => poi.id));
   const folder = tag || UNTAGGED;
   const scope = tickedIds.length
-    ? `the ${targets.length} ticked POI${targets.length === 1 ? "" : "s"} in "${folder}"`
+    ? `the ${targets.length} selected POI${targets.length === 1 ? "" : "s"} in "${folder}"`
     : `all ${targets.length} POI${targets.length === 1 ? "" : "s"} in "${folder}"`;
 
   const hitRoutes = state.routes.filter((route) => route.poi_ids.some((id) => targetIds.has(id)));
@@ -742,7 +741,7 @@ async function routeFromFolder(tag: string, pois: POI[]): Promise<void> {
   const tickedIds = state.selected.filter((id) => inFolder.has(id));
   const poiIds = tickedIds.length ? tickedIds : pois.map((poi) => poi.id);
   if (poiIds.length < 2) {
-    notify("A route needs at least two POIs. Tick two, or put more POIs in this folder.");
+    notify("A route needs at least two POIs. Select two, or put more POIs in this folder.");
     return;
   }
   const name = (await askText("Route name?", tag || "Untagged route"))?.trim();
@@ -1269,7 +1268,7 @@ function renderBonuses(): void {
   const allTicked = shownIds.length > 0 && shownIds.every((id) => state.selected.includes(id));
   const tickAll = h("input", {
     type: "checkbox",
-    title: allTicked ? "Untick every bonus shown" : "Tick every bonus shown",
+    title: allTicked ? "Unselect every bonus shown" : "Select every bonus shown",
     checked: allTicked,
     onchange: () => tickShown(!allTicked),
   });
@@ -1471,25 +1470,27 @@ function renderAddStops(route: Route): HTMLElement {
     { className: "add-stops" },
     picker,
     h("button", {
-      title: "Add the POIs ticked in the POI list to the end of this route, in tick order",
+      title: "Add the POIs selected in the POI list to the end of this route, in the order they were selected",
       disabled: ticked.length === 0,
       onclick: () => run(() => setStops(route, [...route.poi_ids, ...ticked])),
-    }, `add ticked (${ticked.length})`),
+    }, `add selected (${ticked.length})`),
   );
 }
 
-// A route can be added to a plan from its own row, as well as from the plan.
-function planPicker(route: Route): HTMLElement {
-  const available = state.plans.filter((plan) => !plan.route_ids.includes(route.id));
+// Adds the selected routes to a plan (those it does not have yet, in list order), from the Routes toolbar.
+function planPicker(routes: Route[]): HTMLElement {
+  const available = state.plans.filter((plan) => routes.some((route) => !plan.route_ids.includes(route.id)));
   const select: HTMLSelectElement = h(
     "select",
     {
       className: "plan-picker",
-      title: "Add this route to a plan",
+      title: routes.length > 1 ? `Add the ${routes.length} selected routes to a plan` : "Add this route to a plan",
+      disabled: routes.length === 0,
       onchange: () => {
         const plan = state.plans.find((p) => p.id === Number(select.value));
         select.value = "";
-        if (plan) void setPlanRoutes(plan, [...plan.route_ids, route.id]);
+        const added = routes.map((route) => route.id).filter((id) => !plan?.route_ids.includes(id));
+        if (plan) void setPlanRoutes(plan, [...plan.route_ids, ...added]);
       },
     },
     h("option", { value: "" }, !state.plans.length ? "no plans yet" : available.length ? "add to plan…" : "in every plan"),
@@ -1498,13 +1499,19 @@ function planPicker(route: Route): HTMLElement {
   return select;
 }
 
-// One compact row per route: a tick box (for tagging several routes), then the name and stats. Clicking
-// the row selects the route and draws it; the toolbar above the list acts on the selected route. Only the
-// selected row lists its tags and, when opened with "stops", its stops.
+// The selected routes, in the order of the route list.
+function selectedRouteList(): Route[] {
+  return state.routes.filter((route) => state.selectedRoutes.includes(route.id));
+}
+
+// One compact row per route: a check box, then the name and stats. Clicking the row selects only that
+// route and draws it; the check box adds it to (or takes it out of) the selection, for acting on several
+// routes at once. When one route is selected, its row lists its tags and, opened with "stops", its stops.
 function renderRouteItem(route: Route): HTMLElement {
-  const active = state.activeRouteId === route.id;
+  const selected = state.selectedRoutes.includes(route.id);
+  const active = selected && state.selectedRoutes.length === 1;
   const stale = staleRoutes.has(route.id);
-  const classes = ["route", active ? "active" : "", state.shownRouteId === route.id ? "shown" : ""];
+  const classes = ["route", selected ? "active" : "", state.shownRouteId === route.id ? "shown" : ""];
   return h(
     "li",
     { className: classes.filter(Boolean).join(" "), "data-route-id": route.id },
@@ -1514,21 +1521,22 @@ function renderRouteItem(route: Route): HTMLElement {
       h("input", {
         type: "checkbox",
         className: "route-tick",
-        title: "Tick to tag several routes at once",
-        "aria-label": `Tick ${route.name} for tagging`,
-        checked: state.selectedRoutes.includes(route.id),
+        title: "Select this route along with the others selected",
+        "aria-label": `Select ${route.name}`,
+        checked: selected,
         onchange: () => {
-          state.selectedRoutes = state.selectedRoutes.includes(route.id)
+          state.selectedRoutes = selected
             ? state.selectedRoutes.filter((id) => id !== route.id)
             : [...state.selectedRoutes, route.id];
+          renderRoutes();
         },
       }),
       h(
         "button",
         {
           className: "route-select",
-          title: `Select ${route.name} and show it on the map`,
-          "aria-pressed": active,
+          title: `Select only ${route.name} and show it on the map`,
+          "aria-pressed": selected,
           onclick: () => showRoute(route),
         },
         h("span", { className: "name" }, `${route.name} (${route.geometry_source === "imported" ? "track" : route.profile})`),
@@ -1546,75 +1554,132 @@ function renderRouteItem(route: Route): HTMLElement {
   );
 }
 
-// The actions for the selected route, kept at the top of the Routes section. Without a selection the
-// buttons are there but disabled, so the toolbar does not jump about.
+// The actions for the selected routes, kept at the top of the Routes section. Some act on every selected
+// route (calc, tag, untag, tag stops, add to plan, delete); the rest need exactly one. Unusable buttons are
+// there but disabled, so the toolbar does not jump about.
 function renderRouteToolbar(): void {
-  const route = state.routes.find((r) => r.id === state.activeRouteId) ?? null;
+  const routes = selectedRouteList();
+  const route = routes.length === 1 ? routes[0] : null;
   const shown = route !== null && state.shownRouteId === route.id;
-  const stale = route !== null && staleRoutes.has(route.id);
+  const stale = routes.some((r) => staleRoutes.has(r.id));
   const expanded = route !== null && expandedRoutes.has(route.id);
-  const act = (label: string, title: string, action: (route: Route) => void, props: Record<string, unknown> = {}) =>
-    h("button", { title, disabled: !route, onclick: () => route && action(route), ...props }, label);
+  const one = (label: string, title: string, action: (route: Route) => void, props: Record<string, unknown> = {}) =>
+    h("button", { title: route ? title : `${title} (select one route)`, disabled: !route, onclick: () => route && action(route), ...props }, label);
+  const all = (label: string, title: string, action: (routes: Route[]) => void, props: Record<string, unknown> = {}) =>
+    h("button", { title, disabled: routes.length === 0, onclick: () => routes.length && action(routes), ...props }, label);
+  const several = routes.length > 1 ? ` the ${routes.length} selected routes` : " this route";
   $("route-toolbar").replaceChildren(
     h(
       "div",
       { className: "toolbar-title" },
       route
         ? h("strong", { title: route.name }, route.name)
-        : h("span", { className: "meta" }, "Select a route below to act on it."),
+        : routes.length
+          ? h("strong", {}, `${routes.length} routes selected`)
+          : h("span", { className: "meta" }, "Select a route below to act on it; check boxes to select several."),
       ...(stale ? [h("span", { className: "stale" }, "order changed, recalc")] : []),
+      ...(routes.length
+        ? [h("button", {
+            className: "unselect",
+            title: "Unselect all routes",
+            "aria-label": "Unselect all routes",
+            onclick: () => {
+              state.selectedRoutes = [];
+              renderRoutes();
+            },
+          }, "×")]
+        : []),
     ),
     h(
       "div",
       { className: "toolbar-buttons" },
-      act(shown ? "hide" : "show", shown ? "Hide this route and its stop numbers" : "Draw this route on the map",
+      one(shown ? "hide" : "show", shown ? "Hide this route and its stop numbers" : "Draw this route on the map",
         (r) => (shown ? clearShownRoute() : showRoute(r)), { className: "show-route" }),
-      act("stops", expanded ? "Hide the list of stops" : "List the stops, to reorder, remove or add some", (r) => {
+      one("stops", expanded ? "Hide the list of stops" : "List the stops, to reorder, remove or add some", (r) => {
         if (expanded) expandedRoutes.delete(r.id);
         else expandedRoutes.add(r.id);
         renderRoutes();
       }, { "aria-expanded": expanded }),
-      act(stale ? "recalc" : "calc", "Calculate the line through the stops in this order",
-        (r) => run(() => calculate(r)), stale ? { className: "recalc-route" } : {}),
-      act("optimize", "Review a shorter stop order before saving it", (r) => run(() => optimize(r))),
-      act("table", "Table of the stops: bonus, points, miles and arrival time, to print or keep open",
+      all(stale ? "recalc" : "calc", `Calculate the line through the stops of${several}, in order`,
+        (rs) => run(() => calculateRoutes(rs)), stale ? { className: "recalc-route" } : {}),
+      one("optimize", "Review a shorter stop order before saving it", (r) => run(() => optimize(r))),
+      one("table", "Table of the stops: bonus, points, miles and arrival time, to print or keep open",
         (r) => showRouteTable(r.id)),
       route
         ? h("a", { className: "button", href: api.routeGpxUrl(route.id), download: "", title: "Export GPX" }, "GPX")
-        : h("button", { disabled: true, title: "Export GPX" }, "GPX"),
-      act("tag stops", "Add a tag to every POI that is a stop of this route", (r) => run(() => tagRouteStops(r))),
-      route ? planPicker(route) : h("select", { className: "plan-picker", disabled: true }, h("option", {}, "add to plan…")),
-      act("rename", "Rename route", (r) =>
+        : h("button", { disabled: true, title: "Export GPX (select one route)" }, "GPX"),
+      all("tag", `Add a tag to${several}`, (rs) => run(() => tagRoutes(rs, true))),
+      all("untag", `Remove a tag from${several}`, (rs) => run(() => tagRoutes(rs, false))),
+      all("tag stops", `Add a tag to every POI that is a stop of${several}`, (rs) => run(() => tagRouteStops(rs))),
+      planPicker(routes),
+      one("rename", "Rename route", (r) =>
         run(async () => {
           const name = (await askText("Route name?", r.name))?.trim();
           if (!name || name === r.name) return;
           await api.updateRoute(r.id, { name });
           await refresh();
         })),
-      act("duplicate", "Make a copy of this route (stops, tags and line) to change without losing the original",
+      one("duplicate", "Make a copy of this route (stops, tags and line) to change without losing the original",
         (r) => run(() => duplicate(r))),
-      act("delete", "Delete route", (r) =>
+      all("delete", `Delete${several}`, (rs) =>
         run(async () => {
-          if (!(await askConfirm(`Delete route "${r.name}"?`, "Delete"))) return;
-          await api.deleteRoute(r.id);
-          if (state.shownRouteId === r.id) clearShownRoute();
+          const what = rs.length === 1 ? `route "${rs[0].name}"` : `these ${rs.length} routes`;
+          if (!(await askConfirm(`Delete ${what}?`, "Delete"))) return;
+          for (const r of rs) await api.deleteRoute(r.id);
+          if (rs.some((r) => r.id === state.shownRouteId)) clearShownRoute();
           await refresh();
         }), { className: "danger" }),
     ),
   );
 }
 
-// Tags every POI on the route (each once, however often it is a stop). Undo takes the tag off only the
-// POIs that did not already have it.
-async function tagRouteStops(route: Route): Promise<void> {
-  const pois = [...new Set(route.poi_ids)]
+// Calculates each selected route's line. One route goes through calculate() (which asks before replacing
+// an imported GPX track and then shows it); with several, imported tracks are left alone and reported.
+async function calculateRoutes(routes: Route[]): Promise<void> {
+  if (routes.length === 1) return calculate(routes[0]);
+  const tracks = routes.filter((route) => route.geometry_source === "imported");
+  for (const route of routes) {
+    if (route.geometry_source === "imported") continue;
+    await api.calculateRoute(route.id, false);
+    staleRoutes.delete(route.id);
+  }
+  await refresh();
+  if (tracks.length) {
+    notify(`Kept the GPX track of ${tracks.map((route) => `"${route.name}"`).join(", ")}; select it on its own to replace it with a calculated line.`);
+  }
+}
+
+// Tags or untags the selected routes with a name asked for.
+async function tagRoutes(routes: Route[], add: boolean): Promise<void> {
+  const what = routes.length === 1 ? `"${routes[0].name}"` : `the ${routes.length} selected routes`;
+  const name = (await askText(add ? `Tag ${what} with:` : `Remove which tag from ${what}?`))?.trim().toLowerCase();
+  if (!name) return;
+  if (add) {
+    const tag = await api.createTag(name);
+    for (const route of routes) await api.tagItem(tag.id, "route", route.id);
+  } else {
+    const tag = (await api.listTags()).find((t) => t.name === name);
+    if (!tag) {
+      notify(`There is no "${name}" tag.`);
+      return;
+    }
+    for (const route of routes) if (route.tags.includes(name)) await api.untagItem(tag.id, "route", route.id);
+  }
+  await refresh();
+}
+
+// Tags every POI on the selected routes (each once, however often it is a stop). Undo takes the tag off
+// only the POIs that did not already have it.
+async function tagRouteStops(routes: Route[]): Promise<void> {
+  const label = routes.length === 1 ? `"${routes[0].name}"` : `the ${routes.length} selected routes`;
+  const pois = [...new Set(routes.flatMap((route) => route.poi_ids))]
     .map((id) => state.pois.find((poi) => poi.id === id))
     .filter((poi): poi is POI => poi !== undefined);
   if (!pois.length) {
-    notify(`"${route.name}" has no stops to tag.`);
+    notify(`${label} has no stops to tag.`);
     return;
   }
-  const name = (await askText(`Tag all ${pois.length} POIs on "${route.name}" with:`, route.name.toLowerCase()))?.trim().toLowerCase();
+  const name = (await askText(`Tag all ${pois.length} POIs on ${label} with:`, routes.length === 1 ? routes[0].name.toLowerCase() : ""))?.trim().toLowerCase();
   if (!name) return;
   const added = pois.filter((poi) => !poi.tags.includes(name));
   const tag = await api.createTag(name);
@@ -1622,7 +1687,7 @@ async function tagRouteStops(route: Route): Promise<void> {
   await refresh();
   const already = pois.length - added.length;
   showUndo(
-    `Tagged ${added.length} POI${added.length === 1 ? "" : "s"} on "${route.name}" with "${name}"` +
+    `Tagged ${added.length} POI${added.length === 1 ? "" : "s"} on ${label} with "${name}"` +
       (already ? ` (${already} already had it).` : "."),
     () =>
       run(async () => {
@@ -1810,7 +1875,6 @@ async function refresh(): Promise<void> {
   state.routes = routes;
   state.plans = plans;
   state.selectedRoutes = state.selectedRoutes.filter((id) => routes.some((route) => route.id === id));
-  if (!routes.some((route) => route.id === state.activeRouteId)) state.activeRouteId = null;
   renderPois();
   renderRoutes();
   renderPlans();
@@ -1921,7 +1985,7 @@ $("tag-selected").onclick = () =>
     const input = $<HTMLInputElement>("tag-input");
     const name = input.value.trim();
     if (!name || state.selected.length === 0) {
-      notify("Type a tag name and tick at least one POI.");
+      notify("Type a tag name and select at least one POI.");
       return;
     }
     const tag = await api.createTag(name);
@@ -1929,28 +1993,6 @@ $("tag-selected").onclick = () =>
     input.value = "";
     await refresh();
   });
-
-// Tags or untags the ticked routes with the name typed beside the buttons.
-async function tagSelectedRoutes(add: boolean): Promise<void> {
-  const input = $<HTMLInputElement>("route-tag-input");
-  const name = input.value.trim();
-  if (!name || state.selectedRoutes.length === 0) {
-    notify("Type a tag name and tick at least one route.");
-    return;
-  }
-  if (add) {
-    const tag = await api.createTag(name);
-    for (const id of state.selectedRoutes) await api.tagItem(tag.id, "route", id);
-  } else {
-    const tag = (await api.listTags()).find((t) => t.name === name.toLowerCase());
-    if (tag) for (const id of state.selectedRoutes) await api.untagItem(tag.id, "route", id);
-  }
-  input.value = "";
-  await refresh();
-}
-
-$("route-tag-selected").onclick = () => run(() => tagSelectedRoutes(true));
-$("route-untag-selected").onclick = () => run(() => tagSelectedRoutes(false));
 
 $("route-create").onclick = () => run(createRouteFromSelection);
 $("append-selected").onclick = () => run(appendSelectionToRoute);
@@ -1997,12 +2039,13 @@ try {
   // Storage unavailable: start on the map.
 }
 
-// Hides the drawn route and unticks POIs; nothing is deleted.
+// Hides the drawn route and unselects POIs and routes; nothing is deleted.
 $("map-clear").onclick = () => {
   clearShownRoute();
   state.selected = [];
   state.selectedRoutes = [];
   renderSelection();
+  renderRoutes();
 };
 
 $("plan-create").onclick = () =>

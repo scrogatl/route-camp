@@ -239,7 +239,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   muted small hints, solid `.primary` buttons and outlined ones (the default here, because the sidebar
   has many small buttons; rally's default is solid), `.danger` (warning orange) on delete buttons, and
   sortable tables with numbers right-aligned. **Blue and orange only, no red/green pairs** (colour
-  blindness): POI markers slate blue, ticked POIs orange, route line and stop numbers blue, the optimize
+  blindness): POI markers slate blue, selected POIs orange, route line and stop numbers blue, the optimize
   preview dashed orange, plan colours alternate blues and oranges.
 - **Two views**, switched by Map / Bonuses in the header (remembered under `route-camp.view`):
   - **Map:** a sidebar of cards on the left (Import, Selected, POIs, Routes, Plans) and the map filling
@@ -248,14 +248,14 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
     screens). The same `#selected-card` element is moved between the two places by `setView()`.
 - **One selection:** `state.selected` (POI ids in order) is shared by map markers, the POI folders, the
   Bonuses table and the Selected card. `renderSelection()` redraws all of them after any change. A
-  ticked marker shows its number in the selection, in orange (stops of a shown route keep their blue
+  selected marker shows its number in the selection, in orange (stops of a shown route keep their blue
   stop numbers).
-- **Bonuses table:** columns tick, code / name, points (`score`), state, stop min, tags, routes (how many routes
+- **Bonuses table:** columns check box, code / name, points (`score`), state, stop min, tags, routes (how many routes
   the POI is on), notes. Click a heading to sort, again to reverse; numbers sort highest first, text A to
   Z, blanks last (remembered under `route-camp.bonus-sort`). A filter box matches name, state, notes and
   tags; a Tag picker narrows to one tag or Untagged. The status line reads "12 selected · 6,480 points ·
-  showing 139 of 139". The header tick box and **Tick shown** / **Untick shown** act on the rows shown;
-  ticking appends after the current selection in the table's order. A ticked row is tinted and shows its
+  showing 139 of 139". The header check box and **Select shown** / **Unselect shown** act on the rows shown;
+  selecting appends after the current selection in the table's order. A selected row is tinted and shows its
   order number. Clicking a name switches to the map and flies there.
 - **Stop time:** the Routes card has **Minutes at each stop**, the default for every stop (saved through
   `PATCH /settings`). Each stop in a route's stop list, and each row of the Bonuses table, has a ⏱ button
@@ -265,7 +265,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   "9 h 29 min driving + 1 h 20 min at 16 stops = 10 h 49 min", plans add stop time the same way, and the
   Selected card's total adds the selection's stop time. `stopMinutesAt()` in `main.ts` mirrors the
   backend rule for the selection, which is not saved yet.
-- **Selected card:** the ticked bonuses in order, each with a ⠿ drag handle, its number, name, points,
+- **Selected card:** the selected bonuses in order, each with a ⠿ drag handle, its number, name, points,
   ↑ / ↓ and ×, and a points total. Dragging uses pointer events listened for on the window (not pointer
   capture: moving the row in the DOM drops the capture, which first lost every drag). **Create route in
   this order** needs a name and two bonuses; it creates the route with exactly that order and calculates
@@ -298,11 +298,11 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   dialog, to every POI in that folder) and, except on Untagged, "untag all" (removes that folder's tag
   from all its POIs after a confirm; they move to their other folders or to Untagged). Both work while
   the folder is collapsed. Requests go one POI at a time so a big folder doesn't flood SQLite.
-- **Select / unselect:** each POI folder header has a "select" button that ticks every POI in the folder
-  (appended after the current tick order, in the folder's displayed order). Once all of them are
-  ticked it reads "unselect" and unticks them. Works while the folder is collapsed.
+- **Select / unselect:** each POI folder header has a "select" button that selects every POI in the folder
+  (appended after the current selection order, in the folder's displayed order). Once all of them are
+  selected it reads "unselect" and unselects them. Works while the folder is collapsed.
 - **Delete POIs in a folder:** each POI folder header has "delete", labelled "delete N selected" when
-  some of the folder's POIs are ticked (only those are deleted), otherwise "delete all N". It is permanent
+  some of the folder's POIs are selected (only those are deleted), otherwise "delete all N". It is permanent
   and has no undo (a recreated POI would get a new id and lose its route stops), so the confirm does the
   work: it names the folder and count, says how many routes lose stops (names up to three), and says when
   a POI also has other tags, since it is deleted everywhere. The confirm's button is "Delete". The POIs are
@@ -319,42 +319,48 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
 - **Sections collapse:** the POIs, Routes and Plans headers toggle their body. Collapsed sections and
   route folders are remembered in `localStorage` under `route-camp.collapsed` (a list of keys such as
   `section/pois` or `route/<tag>`; `poi/` keys from earlier versions are dropped on load), wrapped in try/catch because storage can be unavailable.
-- **POIs:** markers on the map (18 px, white ring; ticked POIs are orange and numbered by their place in the selection); click
-  the map to add a POI (asks for a name); tick POIs in a folder (tick order is route order); click a name
-  to fly to it; tag the ticked POIs; delete.
+- **POIs:** markers on the map (18 px, white ring; selected POIs are orange and numbered by their place in the selection); click
+  the map to add a POI (asks for a name); select POIs in a folder (selection order is route order); click a name
+  to fly to it; tag the selected POIs; delete.
 - **Map labels:** a "Map labels" control at the top right of the map chooses name (the default,
   since imported names already end in their score), score, both or none, stored in `localStorage` under `route-camp.labels`. Labels are DOM elements inside
   each marker, shown from zoom 9 (`LABEL_MIN_ZOOM`); a white text halo keeps them legible on the basemap.
   Labels do not collide-check: dense clusters overlap at zoom 9–10.
   A MapLibre symbol layer was tried first and stalled the basemap style in the browser pane, so it was
   dropped.
-- The old "New route" card (create from ticked POIs, uncalculated) was replaced by the Selected card.
+- The old "New route" card (create from selected POIs, uncalculated) was replaced by the Selected card.
 - **Route from a folder:** each POI folder header has "route". It asks for a name and a profile (car or
-  fun) and makes a route from the folder's ticked POIs (in tick order) or, if none are ticked, all of its
+  fun) and makes a route from the folder's selected POIs (in selection order) or, if none are selected, all of its
   POIs. The stops keep that order, and the line is calculated in it straight away. Nothing reorders the
   stops. Fewer than two POIs is refused.
-- **Route rows** are one compact row each: a small tick box, then the name with its profile (or "track")
+- **Route rows** are one compact row each: a small check box, then the name with its profile (or "track")
   over a stats line: distance in miles, driving time, stop count and points ("332.0 mi · 8 h 46 min ·
   16 stops · 3,870 points"); the route summary and plan totals show miles and points too. Points count
   each bonus once (Rally HQ at both ends, or a bonus on two of a plan's routes, isn't doubled). An
-  imported GPX track shows "no time" until calculated. Clicking a row **selects** the route and draws it
-  on the map (`showRoute()`, which sets `state.activeRouteId`). The selected row is highlighted, in the
-  accent colour while it is drawn and in grey once hidden, and only it shows its tag chips and, when
-  opened, its stop list. The tick boxes stay faint until hovered or ticked. Ticked routes can be tagged or
-  untagged together with the tag field and **Tag selected** / **Untag** under the list. Clear map also
-  unticks routes; the selected route stays selected.
+  imported GPX track shows "no time" until calculated. The selection is `state.selectedRoutes`, the routes
+  whose boxes are checked. Clicking a row **selects only that route** and draws it on the map
+  (`showRoute()`, which sets the selection to that route); checking a box adds a route to the selection or
+  takes it out, without changing the others. Selected rows are highlighted, in the accent colour while
+  drawn and in grey once hidden. When exactly one route is selected, its row shows its tag chips and, when
+  opened, its stop list. The check boxes stay faint until hovered or checked. Clear map also unselects routes.
+- **Sidebar scrolling:** the sidebar has half a screen of empty space below its last card, so the bottom
+  of any section (the last route, the Plans card) can be scrolled up to mid-screen.
 - **Routes toolbar** (`renderRouteToolbar()`): sticky at the top of the Routes section, so it stays in view
-  while the list scrolls (on a phone it sticks to the top of the screen). It names the selected route and
-  holds every action for it: show / hide, stops (lists the stops), calc / recalc, optimize, table, GPX,
-  tag stops, add to plan (a plan picker), rename, duplicate, delete. With nothing selected the buttons are
-  disabled and it reads "Select a route below to act on it." After a stop change the toolbar title and the
-  row's stats line read "order changed, recalc" in orange, and calc becomes an orange **recalc**.
+  while the list scrolls (on a phone it sticks to the top of the screen). It names the selected route (or
+  "N routes selected") with × to unselect all, and holds every route action. On every selected route:
+  calc / recalc (with several, imported GPX tracks are kept and reported; select one on its own to replace
+  its track), **tag** and **untag** (ask for the tag name), tag stops (all their POIs, each once), add to
+  plan (a plan picker; adds the routes the plan lacks, in list order), delete (one confirm for all). On
+  exactly one route: show / hide, stops (lists the stops), optimize, table, GPX, rename, duplicate.
+  Buttons that do not apply are disabled, and with nothing selected it reads "Select a route below to act
+  on it; check boxes to select several." After a stop change the toolbar title and the row's stats line
+  read "order changed, recalc" in orange, and calc becomes an orange **recalc**.
 - **Route tags** show as chips under the route: × removes one; **+ tag** adds one (or several, comma
   separated) and keeps the others.
 - **Adding stops to an existing route:** in the selected route's stop list, "add a stop…" appends any POI, and
-  **add ticked (N)** appends the ticked POIs in tick order, skipping ones already on the route. Then
+  **add selected (N)** appends the selected POIs in the order they were selected, skipping ones already on the route. Then
   move them with ↑ / ↓ and recalc.
-- **Routes:** create from ticked POIs with a profile; for the selected route the toolbar has **show** /
+- **Routes:** create from selected POIs with a profile; for the selected route the toolbar has **show** /
   **hide** (clicking the row also shows it), **stops** to list its stops, calc, optimize, GPX download,
   tag stops, add to plan (a plan picker), rename, duplicate, delete, table; its tags are chips on its row. **rename** asks for the new name (`PATCH /routes/{id}`
   `{name}`); the stops, line and leg times stay. **table** opens the route table: each stop's number, bonus,
@@ -367,7 +373,7 @@ Files: `frontend/index.html`, `src/main.ts` (app), `src/api.ts` (typed API clien
   stops continues on the left half of a second page, with the headings repeated. **duplicate** asks for a name ("<name> (copy)" by default), then
   selects and shows the copy and scrolls to it, so a route can be changed without losing the original. A new route is selected and scrolled to the same way. While the selected route is drawn, the toolbar's button reads "hide". Showing a
   route draws its line, fits the map to it, and numbers its stops on the map in blue (a POI used twice
-  shows "2,5"). **Clear map** hides the line, removes the stop numbers and unticks everything without
+  shows "2,5"). **Clear map** hides the line, removes the stop numbers and unselects everything without
   deleting anything. Stop markers are 24 px, blue, numbered by position.
 - **Moving stops:** drag a stop's ⠿ handle to any place in the list (the sidebar scrolls when the pointer
   nears its top or bottom edge), or click its position number and type the new position. Either saves

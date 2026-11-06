@@ -78,6 +78,8 @@ a { color: var(--accent); }
   flex-shrink: 0;
   overflow-y: auto;
   padding: 10px;
+  /* Room to scroll past the last card, so whatever is at the bottom can be brought up to mid-screen. */
+  padding-bottom: 50vh;
 }
 
 .card {
@@ -282,6 +284,8 @@ ol.route-stops .name { flex: 1; min-width: 0; cursor: pointer; overflow: hidden;
 .toolbar-title { display: flex; gap: 6px; font-size: 13px; white-space: nowrap; }
 .toolbar-title strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .toolbar-title .stale { flex-shrink: 0; }
+.toolbar-title .meta { white-space: normal; }
+.toolbar-title .unselect { margin-left: auto; flex-shrink: 0; font-size: 12px; padding: 0 6px; line-height: 1.4; }
 .toolbar-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; }
 .toolbar-buttons button, .toolbar-buttons .button { font-size: 12px; padding: 2px 7px; }
 a.button { display: inline-block; text-decoration: none; }

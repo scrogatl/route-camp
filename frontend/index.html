@@ -29,7 +29,7 @@
         <div id="selected-slot">
           <section class="card" id="selected-card">
             <h2>Selected <span id="selected-count" class="meta"></span></h2>
-            <p class="hint">Tick bonuses on the map, in the POI list or in the Bonuses table. Drag ⠿ (or use ↑ ↓) to set the order. A route made here keeps exactly this order.</p>
+            <p class="hint">Select bonuses on the map, in the POI list or in the Bonuses table. Drag ⠿ (or use ↑ ↓) to set the order. A route made here keeps exactly this order.</p>
             <details id="paste-list">
               <summary>Type or paste a list of bonuses</summary>
               <label class="field"><span>Bonus codes or POI names <small>in route order, separated by commas, spaces, new lines or →; "ABAC" also finds "ABAC 510"</small></span>
@@ -53,7 +53,7 @@
             </label>
             <div class="actions">
               <button id="route-create" class="primary" title="Make a route through the selected bonuses in this order and calculate its line">Create route in this order</button>
-              <button id="selected-clear" title="Untick every selected bonus (nothing is deleted)">Clear selection</button>
+              <button id="selected-clear" title="Unselect every selected bonus (nothing is deleted)">Clear selection</button>
             </div>
             <div class="row append-row">
               <select id="append-route" title="An existing route to add the selection to"></select>
@@ -65,7 +65,7 @@
         <section class="card">
           <h2><button class="section-toggle" data-section="pois" aria-expanded="true">POIs</button></h2>
           <div id="pois-body">
-            <p class="hint">Click the map to add a POI. Tick POIs to build a route or tag them. Folders are tags: a POI with several tags appears in each of its folders.</p>
+            <p class="hint">Click the map to add a POI. Select POIs to build a route or tag them. Folders are tags: a POI with several tags appears in each of its folders.</p>
             <ul id="poi-list"></ul>
             <div class="row">
               <input id="tag-input" placeholder="tag name" />
@@ -77,18 +77,13 @@
         <section class="card">
           <h2><button class="section-toggle" data-section="routes" aria-expanded="true">Routes</button></h2>
           <div id="routes-body">
-            <div id="route-toolbar" role="toolbar" aria-label="Actions for the selected route"></div>
+            <div id="route-toolbar" role="toolbar" aria-label="Actions for the selected routes"></div>
             <label class="field stop-default"><span>Minutes at each stop <small>added to the driving time; set a bonus's own minutes with its ⏱ button. The first and last stops (Rally HQ) count only with their own minutes.</small></span>
               <input id="stop-minutes" type="number" min="0" max="1440" step="1" inputmode="numeric" />
             </label>
             <ul id="route-list"></ul>
-            <div class="row">
-              <input id="route-tag-input" placeholder="tag name" />
-              <button id="route-tag-selected" title="Add this tag to the ticked routes">Tag selected</button>
-              <button id="route-untag-selected" title="Remove this tag from the ticked routes">Untag</button>
-            </div>
             <p id="route-summary" class="hint"></p>
-            <button id="map-clear" title="Hide the route line and untick POIs and routes (nothing is deleted)">Clear map</button>
+            <button id="map-clear" title="Hide the route line and unselect POIs and routes (nothing is deleted)">Clear map</button>
           </div>
         </section>
 
@@ -132,8 +127,8 @@
                 <select id="bonus-tag"></select>
               </label>
               <div class="actions">
-                <button id="bonus-tick-shown" title="Tick every bonus the filter shows, after the ones already selected">Tick shown</button>
-                <button id="bonus-untick-shown" title="Untick every bonus the filter shows">Untick shown</button>
+                <button id="bonus-tick-shown" title="Select every bonus the filter shows, after the ones already selected">Select shown</button>
+                <button id="bonus-untick-shown" title="Unselect every bonus the filter shows">Unselect shown</button>
               </div>
             </div>
             <div class="table-wrap">
