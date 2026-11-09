@@ -1,3 +1,24 @@
+// BEGIN LICENSE HEADER
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Scott Rogers <scott@scottandrewrogers.com>
+//
+// Part of route-camp. Licensed under the Apache License, Version 2.0;
+// see the LICENSE and NOTICE files in the repository root.
+// Redistributions must retain this notice and the NOTICE file.
+//
+// Commit history (date time tz | author <email> | commit | message):
+//   2026-11-06 15:54:21 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 431d1ad | Garmin trip marks on GPX export, GPX without the track, MyRoute-app Lock Route note
+//   2026-11-06 11:34:33 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 94cc64e | Rename routes, and one toolbar for the selected route
+//   2026-11-06 10:59:13 -0500 | Scott Rogers <scott@scottandrewrogers.com> | f9b12e3 | Duplicate a route, and a route table with arrival times
+//   2026-11-06 06:20:07 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 108a72d | Add time at each stop: a default for all stops and a bonus's own minutes
+//   2026-11-05 18:10:22 -0500 | Scott Rogers <scott@scottandrewrogers.com> | c781a84 | Bonuses table, ordered Selected list, and create a route in that order
+//   2026-11-05 17:07:59 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 88bba4f | Route from a folder, optimize review, stop editing, show and plans
+//   2026-11-05 16:31:41 -0500 | Scott Rogers <scott@scottandrewrogers.com> | f40e901 | Show and edit POI scores in the POI list
+//   2026-11-05 16:18:11 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 24b208b | Add tag all / untag all to POI folders
+//   2026-11-05 16:05:14 -0500 | Scott Rogers <scott@scottandrewrogers.com> | b6bd2fa | Group POIs and routes into tag folders; collapsible sections
+//   2026-11-05 13:54:45 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 40b262d | Add plans UI, GPX track import report and replace confirmation
+//   2026-11-05 13:14:25 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 6223ce0 | Add Vite + MapLibre frontend
+// END LICENSE HEADER
 export type Profile = "car" | "fun";
 export type ItemKind = "poi" | "route" | "plan";
 export type LonLat = [number, number];

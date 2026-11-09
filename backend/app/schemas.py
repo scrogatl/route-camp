@@ -1,3 +1,20 @@
+# BEGIN LICENSE HEADER
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Scott Rogers <scott@scottandrewrogers.com>
+#
+# Part of route-camp. Licensed under the Apache License, Version 2.0;
+# see the LICENSE and NOTICE files in the repository root.
+# Redistributions must retain this notice and the NOTICE file.
+#
+# Commit history (date time tz | author <email> | commit | message):
+#   2026-11-06 10:59:13 -0500 | Scott Rogers <scott@scottandrewrogers.com> | f9b12e3 | Duplicate a route, and a route table with arrival times
+#   2026-11-06 06:20:07 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 108a72d | Add time at each stop: a default for all stops and a bonus's own minutes
+#   2026-11-05 18:05:03 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 588aab5 | Import rally bonus CSVs and store a POI's state
+#   2026-11-05 17:04:04 -0500 | Scott Rogers <scott@scottandrewrogers.com> | b1b94e3 | Preview an optimized stop order without saving it
+#   2026-11-05 16:30:44 -0500 | Scott Rogers <scott@scottandrewrogers.com> | fdd43dc | Add a nullable POI score, filled from names
+#   2026-11-05 13:50:25 -0500 | Scott Rogers <scott@scottandrewrogers.com> | e0f6e37 | Import GPX tracks as routes, de-duplicate re-imports, guard imported lines
+#   2026-11-05 13:14:25 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 42f2690 | Add REST API, GraphHopper routing and stop optimization
+# END LICENSE HEADER
 """Pydantic request/response models and ORM -> response converters."""
 
 from datetime import datetime

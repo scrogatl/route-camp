@@ -1,3 +1,17 @@
+// BEGIN LICENSE HEADER
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Scott Rogers <scott@scottandrewrogers.com>
+//
+// Part of route-camp. Licensed under the Apache License, Version 2.0;
+// see the LICENSE and NOTICE files in the repository root.
+// Redistributions must retain this notice and the NOTICE file.
+//
+// Commit history (date time tz | author <email> | commit | message):
+//   2026-11-05 18:02:37 -0500 | Scott Rogers <scott@scottandrewrogers.com> | dfd0e74 | Adopt the rally-route-finder look: cards, header, blue/orange palette
+//   2026-11-05 17:07:59 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 88bba4f | Route from a folder, optimize review, stop editing, show and plans
+//   2026-11-05 16:31:14 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 30cb6a0 | Undo bar after untag all
+//   2026-11-05 14:26:38 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 487ddb8 | Replace native dialogs with in-page ones; add Clear map
+// END LICENSE HEADER
 // In-page replacements for alert/confirm/prompt. Native dialogs are blocked in some embedded
 // browsers (confirm() silently returns false there), so the app never relies on them.
 

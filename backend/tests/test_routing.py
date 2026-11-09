@@ -1,3 +1,14 @@
+# BEGIN LICENSE HEADER
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Scott Rogers <scott@scottandrewrogers.com>
+#
+# Part of route-camp. Licensed under the Apache License, Version 2.0;
+# see the LICENSE and NOTICE files in the repository root.
+# Redistributions must retain this notice and the NOTICE file.
+#
+# Commit history (date time tz | author <email> | commit | message):
+#   2026-11-06 10:59:13 -0500 | Scott Rogers <scott@scottandrewrogers.com> | f9b12e3 | Duplicate a route, and a route table with arrival times
+# END LICENSE HEADER
 from app.routing import split_legs
 
 

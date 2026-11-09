@@ -186,3 +186,12 @@ npm run dev                 # http://localhost:5173
 - **No authentication.** Anyone who can reach the backend can change the data.
 - **SQLite with synchronous SQLAlchemy calls** inside FastAPI handlers. Fine for one user, not for heavy concurrent use.
 - **Graph cache files are root-owned** because the GraphHopper container runs as root. Deleting a region's cache needs `sudo`.
+
+## License
+
+Copyright 2026 Scott Rogers <scott@scottandrewrogers.com>
+
+Licensed under the [Apache License, Version 2.0](LICENSE). You may use, modify
+and redistribute this project, including commercially, provided you keep the
+copyright and attribution notices, include the [NOTICE](NOTICE) file, and mark
+any files you change.

@@ -1,3 +1,14 @@
+# BEGIN LICENSE HEADER
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Scott Rogers <scott@scottandrewrogers.com>
+#
+# Part of route-camp. Licensed under the Apache License, Version 2.0;
+# see the LICENSE and NOTICE files in the repository root.
+# Redistributions must retain this notice and the NOTICE file.
+#
+# Commit history (date time tz | author <email> | commit | message):
+#   2026-11-05 15:57:09 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 5f93c30 | Export Garmin shaping points along the route line
+# END LICENSE HEADER
 """Shaping points for Garmin export.
 
 A Garmin recalculates a trip between its route points on its own maps. Extra shaping points taken from

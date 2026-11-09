@@ -1,3 +1,39 @@
+/*
+ * BEGIN LICENSE HEADER
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2026 Scott Rogers <scott@scottandrewrogers.com>
+ *
+ * Part of route-camp. Licensed under the Apache License, Version 2.0;
+ * see the LICENSE and NOTICE files in the repository root.
+ * Redistributions must retain this notice and the NOTICE file.
+ *
+ * Commit history (date time tz | author <email> | commit | message):
+ *   2026-11-06 11:58:35 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 0f72aa4 | Select several routes for the toolbar; scroll room in the sidebar
+ *   2026-11-06 11:34:33 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 94cc64e | Rename routes, and one toolbar for the selected route
+ *   2026-11-06 11:08:01 -0500 | Scott Rogers <scott@scottandrewrogers.com> | df9c886 | Print the route table on half a landscape letter page
+ *   2026-11-06 10:59:13 -0500 | Scott Rogers <scott@scottandrewrogers.com> | f9b12e3 | Duplicate a route, and a route table with arrival times
+ *   2026-11-06 06:20:07 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 108a72d | Add time at each stop: a default for all stops and a bonus's own minutes
+ *   2026-11-06 04:16:06 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 396904b | Scroll to a newly created route and open its folder
+ *   2026-11-06 03:48:44 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 72ce35b | Select bonuses by typing or pasting a list of codes
+ *   2026-11-06 03:39:13 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 90877b7 | Drag route stops into place, move by position number, tag a route's stops
+ *   2026-11-05 18:10:22 -0500 | Scott Rogers <scott@scottandrewrogers.com> | c781a84 | Bonuses table, ordered Selected list, and create a route in that order
+ *   2026-11-05 18:02:37 -0500 | Scott Rogers <scott@scottandrewrogers.com> | dfd0e74 | Adopt the rally-route-finder look: cards, header, blue/orange palette
+ *   2026-11-05 17:42:06 -0500 | Scott Rogers <scott@scottandrewrogers.com> | eff04e1 | Add tags and stops to existing routes
+ *   2026-11-05 17:27:42 -0500 | Scott Rogers <scott@scottandrewrogers.com> | a68f022 | Drag to resize the sidebar
+ *   2026-11-05 17:09:59 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 22df044 | Keep the user's stop order; recalc after reordering instead of optimizing
+ *   2026-11-05 17:07:59 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 88bba4f | Route from a folder, optimize review, stop editing, show and plans
+ *   2026-11-05 16:49:09 -0500 | Scott Rogers <scott@scottandrewrogers.com> | db4116a | Fix POI markers drifting off their positions
+ *   2026-11-05 16:36:27 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 06a9bb5 | Draw POI labels as DOM labels from zoom 9
+ *   2026-11-05 16:33:16 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 670836b | Move undo bar styles into src/style.css
+ *   2026-11-05 16:31:47 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 3a57cfb | Larger POI markers with name and score labels
+ *   2026-11-05 16:18:11 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 24b208b | Add tag all / untag all to POI folders
+ *   2026-11-05 16:05:14 -0500 | Scott Rogers <scott@scottandrewrogers.com> | b6bd2fa | Group POIs and routes into tag folders; collapsible sections
+ *   2026-11-05 14:26:38 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 487ddb8 | Replace native dialogs with in-page ones; add Clear map
+ *   2026-11-05 13:54:45 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 40b262d | Add plans UI, GPX track import report and replace confirmation
+ *   2026-11-05 13:19:21 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 59d49ae | Fix frontend startup, checkbox layout and route drawing
+ *   2026-11-05 13:14:25 -0500 | Scott Rogers <scott@scottandrewrogers.com> | 6223ce0 | Add Vite + MapLibre frontend
+ * END LICENSE HEADER
+ */
 /* The look of rally-route-finder: grey page, white cards, blue accent with orange for warnings and
    highlights. Blue and orange only, never red/green pairs, for red-green colour blindness. */
 :root {
